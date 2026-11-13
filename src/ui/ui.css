@@ -872,3 +872,56 @@ kbd {
 		width: 100%;
 	}
 }
+
+/* Tor tabs */
+
+:root {
+	--tor: #a46bff;
+}
+
+.tab.is-tor::before {
+	background: var(--tor);
+}
+
+.tab.is-tor .tab-title::before {
+	content: attr(data-private) " · ";
+	color: var(--tor);
+}
+
+.secure.is-tor {
+	color: var(--tor);
+}
+
+.secure.is-tor.is-unsafe {
+	color: var(--hot);
+}
+
+.menu .tor-item span {
+	color: var(--tor);
+}
+
+.tor-connect h1 {
+	color: var(--tor);
+}
+
+.tor-bar {
+	width: min(360px, 70vw);
+	height: 4px;
+	margin: 10px 0 6px;
+	background: var(--line);
+	overflow: hidden;
+}
+
+.tor-bar i {
+	display: block;
+	height: 100%;
+	background: var(--tor);
+	transform: scaleX(0);
+	transform-origin: left;
+	transition: transform .4s var(--ease);
+}
+
+.tor-connect button {
+	background: var(--tor);
+	color: #000000;
+}

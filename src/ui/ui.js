@@ -3,6 +3,9 @@ const element = id => document.getElementById(id);
 const panelButtons = { shieldPanel: "shields", menuPanel: "menu", boosterPanel: "booster" };
 const searchPrefixes = { web: "web", w: "web", image: "images", images: "images", img: "images", i: "images", video: "videos", videos: "videos", vid: "videos", v: "videos" };
 const lockMinutes = 25;
+const torHome = "mog://tor/";
+// Tor tabs run with JavaScript off, so they search the plain HTML version of DuckDuckGo.
+const torSearch = "https://html.duckduckgo.com/html/?q=%s";
 
 const state = {
 	tabs: [],
@@ -10,6 +13,7 @@ const state = {
 	closed: [],
 	settings: { shields: true, blockCookies: true, stripParams: true, shieldsOff: [], searchMode: "web", chinaMode: false, flag: "" },
 	update: { status: "idle", version: "", percent: 0 },
+	tor: { status: "off", progress: 0, summary: "" },
 	regionTimer: 0,
 	smash: null,
 	smashTimer: 0,
@@ -67,11 +71,16 @@ function searchUrl(text, mode = state.mode) {
 	return (state.search[mode] ?? state.search.web).replace("%s", encodeURIComponent(text));
 }
 
-function toAddress(text) {
+function toAddress(text, tab = null) {
 
 	const value = text.trim();
 	if (!value) return null;
 	if (/^(https?|mog):\/\//i.test(value)) return { url: value, isUpgraded: false };
+	if (tab?.isTor) {
+		// Onion services are end-to-end encrypted by Tor and mostly serve plain http. Everything else is https only, never downgraded.
+		if (!/\s/.test(value) && /^[^\s/]+\.[^\s/.]{2,}(:\d+)?(\/.*)?$/.test(value)) return { url: `${/^[^\s/:]+\.onion(:\d+)?(\/|$)/i.test(value) ? "http" : "https"}://${value}`, isUpgraded: false };
+		return { url: torSearch.replace("%s", encodeURIComponent(value)), isUpgraded: false };
+	}
 
 	const prefixed = /^([a-z]+):\s*(\S.*)$/i.exec(value);
 	const prefixMode = prefixed && searchPrefixes[prefixed[1].toLowerCase()];
@@ -146,6 +155,7 @@ function report() {
 		favIconUrl: tab.favicon,
 		isActive: tab === state.active,
 		isPrivate: tab.isPrivate,
+		isTor: tab.isTor,
 	})));
 
 }
@@ -285,7 +295,8 @@ function moveGlider() {
 	const bounds = tab.button.getBoundingClientRect();
 	glider.style.width = `${bounds.width}px`;
 	glider.style.transform = `translateX(${bounds.left - row.left}px)`;
-	glider.classList.toggle("is-private", tab.isPrivate);
+	glider.classList.toggle("is-private", tab.isPrivate && !tab.isTor);
+	glider.classList.toggle("is-tor", tab.isTor);
 
 }
 
@@ -306,7 +317,7 @@ function renderTab(tab) {
 	const title = tab.title || t("newTab");
 	tab.button.setAttribute("aria-selected", String(tab === state.active));
 	tab.titleNode.textContent = title;
-	tab.titleNode.dataset.private = t("private");
+	tab.titleNode.dataset.private = tab.isTor ? "Tor" : t("private");
 	tab.button.dataset.tip = title;
 	tab.soundNode.hidden = !tab.isAudible && !tab.isMuted;
 	tab.soundNode.classList.toggle("is-muted", tab.isMuted);
@@ -344,10 +355,16 @@ function renderToolbar() {
 	const input = element("url");
 	const secure = element("secure");
 	const isInternal = url.startsWith("mog:");
-	if (document.activeElement !== input) input.value = url === state.homeUrl ? "" : url;
+	if (document.activeElement !== input) input.value = url === state.homeUrl || url === torHome ? "" : url;
 
-	secure.textContent = isInternal ? "MOG" : url.startsWith("https:") ? t("secure") : t("notSecure");
-	secure.className = `secure ${isInternal || url.startsWith("https:") ? "is-safe" : "is-unsafe"}`;
+	if (tab.isTor) {
+		const isOnion = /\.onion$/i.test(hostOf(url));
+		secure.textContent = state.tor.status !== "ready" ? "TOR …" : isOnion ? "ONION" : isInternal || url.startsWith("https:") ? "TOR" : "TOR · NOT SECURE";
+		secure.className = `secure is-tor ${isInternal || isOnion || url.startsWith("https:") ? "" : "is-unsafe"}`;
+	} else {
+		secure.textContent = isInternal ? "MOG" : url.startsWith("https:") ? t("secure") : t("notSecure");
+		secure.className = `secure ${isInternal || url.startsWith("https:") ? "is-safe" : "is-unsafe"}`;
+	}
 	element("back").disabled = !tab.isReady || !tab.view.canGoBack();
 	element("forward").disabled = !tab.isReady || !tab.view.canGoForward();
 	element("reload").classList.toggle("is-loading", tab.isLoading);
@@ -357,10 +374,11 @@ function renderToolbar() {
 	element("star").classList.toggle("is-on", isSaved);
 	element("star").hidden = isInternal;
 	element("mode").textContent = t(state.mode);
-	input.placeholder = t("searchHint", { engine: state.mode === "web" ? state.search.name : `${state.search.name} ${t(state.mode)}` });
+	element("mode").hidden = tab.isTor;
+	input.placeholder = tab.isTor ? "Search DuckDuckGo over Tor or type a URL" : t("searchHint", { engine: state.mode === "web" ? state.search.name : `${state.search.name} ${t(state.mode)}` });
 
 	const host = hostOf(url);
-	const isShielded = state.settings.shields && !state.settings.shieldsOff.includes(host);
+	const isShielded = !tab.isTor && state.settings.shields && !state.settings.shieldsOff.includes(host);
 	const count = state.blocked.get(tab.id) ?? 0;
 	const countNode = element("shieldCount");
 	const countText = isShielded ? (count > 999 ? "999+" : String(count)) : "off";
@@ -375,7 +393,7 @@ function renderToolbar() {
 	element("panelTotal").textContent = `${state.blockedTotal.toLocaleString()} mogged in total.`;
 	element("siteLabel").textContent = host && !isInternal ? `Shields on ${host}` : "Shields on this site";
 	element("siteShield").checked = isShielded;
-	element("siteShield").disabled = !host || isInternal || !state.settings.shields;
+	element("siteShield").disabled = !host || isInternal || tab.isTor || !state.settings.shields;
 	element("optShields").checked = state.settings.shields;
 	element("optCookies").checked = state.settings.blockCookies;
 	element("optParams").checked = state.settings.stripParams;
@@ -437,6 +455,58 @@ function clearFailure(tab) {
 
 }
 
+// Covers each Tor tab while Tor connects. The page underneath can't reach the network until then anyway.
+function renderTor() {
+
+	const { status, progress, summary } = state.tor;
+	for (const tab of state.tabs) {
+		if (!tab.isTor || status === "ready") {
+			tab.torBox?.remove();
+			tab.torBox = null;
+			continue;
+		}
+		if (!tab.torBox) {
+			const box = el("div", "failure tor-connect");
+			box.append(el("h1"), el("p", "tor-summary"), el("div", "tor-bar"), el("p", "", "Bridges are picked automatically if a direct connection is blocked. Safest mode is on: JavaScript, WebGL, remote fonts and SVG images are off on every site."));
+			box.querySelector(".tor-bar").append(el("i"));
+			const retry = el("button", "", "Try again");
+			retry.type = "button";
+			retry.addEventListener("click", startTor);
+			box.append(retry);
+			tab.torBox = box;
+			element("views").append(box);
+		}
+		const isStuck = status === "error" || status === "missing";
+		tab.torBox.querySelector("h1").textContent = status === "missing" ? "No Tor" : isStuck ? "Tor is down" : "Connecting to Tor";
+		tab.torBox.querySelector(".tor-summary").textContent = summary || "Starting Tor";
+		tab.torBox.querySelector(".tor-bar i").style.transform = `scaleX(${progress / 100})`;
+		tab.torBox.querySelector("button").hidden = !isStuck;
+		tab.torBox.hidden = tab !== state.active;
+	}
+
+}
+
+function applyTor(next) {
+
+	if (!next) return;
+	const wasReady = state.tor.status === "ready";
+	state.tor = next;
+	renderTor();
+	if (state.active?.isTor) renderToolbar();
+	if (!wasReady && next.status === "ready") {
+		for (const tab of state.tabs) {
+			if (tab.isTor && tab.isReady && tab.url.startsWith(torHome)) tab.view.reload();
+		}
+	}
+
+}
+
+async function startTor() {
+
+	applyTor(await window.mog.invoke("ui:tor").catch(() => null));
+
+}
+
 function activate(tab) {
 
 	const isSwitch = state.active !== tab;
@@ -444,6 +514,7 @@ function activate(tab) {
 	for (const item of state.tabs) {
 		item.view.classList.toggle("is-active", item === tab);
 		if (item.failure) item.failure.hidden = item !== tab;
+		if (item.torBox) item.torBox.hidden = item !== tab;
 		renderTab(item);
 	}
 	if (isSwitch) {
@@ -535,16 +606,19 @@ function startDrag(tab, event) {
 
 }
 
-function createTab({ url, isPrivate = false, isBackground = false, openerId } = {}) {
+function createTab({ url, isPrivate = false, isTor = false, isBackground = false, openerId } = {}) {
 
 	const opener = state.tabs.find(item => item.id && item.id === openerId);
+	const isTorTab = isTor || Boolean(opener?.isTor);
 	const tab = {
 		id: 0,
 		key: ++state.tabCounter,
-		url: url || state.homeUrl,
+		url: url || (isTorTab ? torHome : state.homeUrl),
 		title: "",
 		favicon: "",
-		isPrivate: isPrivate || Boolean(opener?.isPrivate),
+		isTor: isTorTab,
+		torBox: null,
+		isPrivate: isPrivate || isTorTab || Boolean(opener?.isPrivate),
 		isLoading: true,
 		isReady: false,
 		isAudible: false,
@@ -568,7 +642,8 @@ function createTab({ url, isPrivate = false, isBackground = false, openerId } = 
 	tab.soundNode.type = "button";
 	tab.button.setAttribute("role", "tab");
 	tab.button.tabIndex = 0;
-	tab.button.classList.toggle("is-private", tab.isPrivate);
+	tab.button.classList.toggle("is-private", tab.isPrivate && !tab.isTor);
+	tab.button.classList.toggle("is-tor", tab.isTor);
 	tab.button.append(tab.iconNode, tab.titleNode, tab.soundNode, close);
 	tab.button.addEventListener("animationend", () => tab.button.classList.remove("is-opening"), { once: true });
 	tab.button.addEventListener("pointerdown", event => startDrag(tab, event));
@@ -588,7 +663,7 @@ function createTab({ url, isPrivate = false, isBackground = false, openerId } = 
 		closeTab(tab);
 	});
 
-	view.setAttribute("partition", tab.isPrivate ? "mog-private" : "persist:mog");
+	view.setAttribute("partition", tab.isTor ? "mog-tor" : tab.isPrivate ? "mog-private" : "persist:mog");
 	view.setAttribute("allowpopups", "");
 	view.setAttribute("src", tab.url);
 
@@ -671,6 +746,10 @@ function createTab({ url, isPrivate = false, isBackground = false, openerId } = 
 	element("views").append(view);
 
 	refreshDragRegions();
+	if (tab.isTor) {
+		renderTor();
+		startTor();
+	}
 	if (isBackground && state.active) {
 		renderTab(tab);
 		followGlider();
@@ -692,6 +771,7 @@ function closeTab(tab, isInstant = false) {
 	state.blocked.delete(tab.id);
 	state.badges.delete(tab.id);
 	clearFailure(tab);
+	tab.torBox?.remove();
 	tab.view.remove();
 	if (tab.id) window.mog.send("ui:tab-event", { type: "removed", id: tab.id });
 
@@ -727,9 +807,10 @@ function closeTab(tab, isInstant = false) {
 
 function go(text) {
 
-	const target = toAddress(text);
 	const tab = state.active;
+	const target = toAddress(text, tab);
 	if (!target || !tab) return;
+	if (tab.isTor && state.tor.status !== "ready" && !target.url.startsWith("mog:")) return toast("Tor is still connecting. Hang on.");
 
 	clearFailure(tab);
 	tab.isUpgraded = target.isUpgraded;
@@ -1026,6 +1107,7 @@ function showDownload({ name, received, total, status }) {
 const actions = {
 	"new-tab": () => createTab(),
 	"new-private": () => createTab({ isPrivate: true }),
+	"new-tor": () => createTab({ isTor: true }),
 	"close-tab": () => state.active && closeTab(state.active),
 	reopen: () => state.closed.length && createTab({ url: state.closed.pop() }),
 	"focus-url": () => {
@@ -1042,7 +1124,7 @@ const actions = {
 	},
 	back: () => state.active?.isReady && state.active.view.canGoBack() && state.active.view.goBack(),
 	forward: () => state.active?.isReady && state.active.view.canGoForward() && state.active.view.goForward(),
-	home: () => go(state.homeUrl),
+	home: () => go(state.active?.isTor ? torHome : state.homeUrl),
 	bookmark: toggleBookmark,
 	booster: toggleBooster,
 	"booster-settings": () => createTab({ url: "mog://booster/options.html" }),
@@ -1223,6 +1305,7 @@ function bindEvents() {
 	window.mog.on("ui:toast", toast);
 	window.mog.on("ui:state", applyState);
 	window.mog.on("ui:download", showDownload);
+	window.mog.on("ui:tor-state", applyTor);
 	window.mog.on("ui:update-state", next => {
 		state.update = next;
 		renderUpdate();
@@ -1235,7 +1318,7 @@ function bindEvents() {
 		const tab = state.tabs.find(item => item.key === key);
 		if (!tab) return;
 		if (action === "reload") tab.isReady && tab.view.reload();
-		else if (action === "duplicate") createTab({ url: tab.url, isPrivate: tab.isPrivate, openerId: tab.id });
+		else if (action === "duplicate") createTab({ url: tab.url, isPrivate: tab.isPrivate, isTor: tab.isTor, openerId: tab.id });
 		else if (action === "mute") toggleMute(tab);
 		else if (action === "close") closeTab(tab);
 		else if (action === "close-others") for (const other of state.tabs.filter(item => item !== tab)) closeTab(other);

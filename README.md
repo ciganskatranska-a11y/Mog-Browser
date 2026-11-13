@@ -18,6 +18,7 @@ Download `MogBrowser-Setup.exe` from the latest [release](../../releases/latest)
 - **Offline game:** a bonesmash clicker on the error page when a site cannot be reached.
 - **China mode 中文模式:** Baidu search, Chinese interface and site tiles, and a Chinese-language request header to every site.
 - **Lock In mode (Ctrl+Shift+L):** hides secondary controls and runs a 25-minute focus timer.
+- **Tor tabs (Ctrl+Shift+O):** route everything through the Tor network, using Tor from the installer (tick **Install Tor**, off by default) or from an installed Tor Browser. If a direct connection is blocked, the browser tries the built-in obfs4, Snowflake and meek bridges on its own and remembers which one worked. Safest mode is always on: no JavaScript, WebGL, remote fonts, SVG images or plugins. Nothing loads until Tor has connected, no history is kept, and site data is wiped when the last Tor tab closes. Tor tabs run on Chromium, so for the strongest anonymity use Tor Browser itself.
 - **Also:** private tabs, tab dragging, find on page, screenshots, history, bookmarks and session restore.
 
 ## Develop
@@ -25,9 +26,10 @@ Download `MogBrowser-Setup.exe` from the latest [release](../../releases/latest)
 ```
 npm install
 npm start        # run from source
-npm test         # end-to-end smoke test (35 checks)
+npm test         # end-to-end smoke test (40 checks)
+npm run tor      # download the Tor Expert Bundle into vendor/tor (checksum-verified)
 npm run art      # re-render installer artwork into build/
-npm run dist     # build the installer into dist/ without publishing
+npm run dist     # build the installer into dist/ without publishing (fetches Tor first)
 ```
 
 ## Release a new version

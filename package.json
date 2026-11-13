@@ -9,9 +9,10 @@
 		"prestart": "node scripts/build.js",
 		"start": "electron .",
 		"test": "node scripts/build.js && electron scripts/smoke.js",
-		"dist": "node scripts/build.js && electron-builder --win --publish never",
-		"release": "node scripts/build.js && electron-builder --win --publish always",
-		"art": "electron scripts/installer-art.js"
+		"dist": "node scripts/build.js && node scripts/fetch-tor.js --required && electron-builder --win --publish never",
+		"release": "node scripts/build.js && node scripts/fetch-tor.js --required && electron-builder --win --publish always",
+		"art": "electron scripts/installer-art.js",
+		"tor": "node scripts/fetch-tor.js"
 	},
 	"license": "MIT",
 	"devDependencies": {

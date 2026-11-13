@@ -3,3 +3,4 @@ dist/
 Chromium/
 release/
 *.log
+vendor/

@@ -40,7 +40,9 @@ function makeTone() {
 
 }
 
+const leaks = [];
 const server = http.createServer((request, response) => {
+	if (request.url.includes("tor-leak")) leaks.push(request.url);
 	if (request.url.startsWith("/tone.wav")) return response.writeHead(200, { "content-type": "audio/wav" }).end(makeTone());
 	if (request.url.startsWith("/ads.js")) return response.writeHead(200, { "content-type": "text/javascript" }).end("window.adLoaded = true;");
 	response.writeHead(200, { "content-type": "text/html", "content-security-policy": "default-src 'self'; script-src 'self' https://pagead2.googlesyndication.com" });
@@ -228,6 +230,24 @@ app.whenReady().then(async () => {
 	await wait(1500);
 	check("private tab opens", await inUi("state.active.isPrivate && state.active.view.getAttribute('partition') === 'mog-private'"));
 	await shoot("mog-private.png");
+
+	await inUi("runAction('new-tor')");
+	await wait(2500);
+	const torTab = await inUi("({ id: state.active.id, isTor: state.active.isTor, isPrivate: state.active.isPrivate, partition: state.active.view.getAttribute('partition'), url: state.active.url, secure: element('secure').textContent, status: state.tor.status, overlay: Boolean(state.active.torBox && !state.active.torBox.hidden) })");
+	check("Tor tab opens in its own session", torTab.isTor && torTab.isPrivate && torTab.partition === "mog-tor" && torTab.url === "mog://tor/" && torTab.secure.startsWith("TOR"), JSON.stringify(torTab));
+	check("Tor tab shows Tor's state until it connects", torTab.status === "ready" ? !torTab.overlay : torTab.overlay, torTab.status);
+	const torContents = webContents.fromId(torTab.id);
+	const torPreferences = torContents.getLastWebPreferences();
+	check("Tor tab runs in safest mode", torPreferences.javascript === false && !torPreferences.preload, JSON.stringify({ javascript: torPreferences.javascript, preload: torPreferences.preload }));
+	check("Tor tab searches without JavaScript", (await inUi("toAddress('jawline', state.active).url")) === "https://html.duckduckgo.com/html/?q=jawline" && (await inUi("toAddress('abc.onion', state.active).url")) === "http://abc.onion");
+	if (torTab.status !== "ready") {
+		torContents.loadURL(`${page.replace("?", "tor-leak?")}`).catch(() => {});
+		await wait(1500);
+		check("Tor tab can't reach the network before Tor connects", leaks.length === 0, JSON.stringify(leaks));
+	}
+	await shoot("mog-tor.png");
+	await inUi("closeTab(state.active)");
+	await wait(600);
 
 	console.log(results.every(Boolean) ? "\nAll checks passed." : `\n${results.filter(isPassing => !isPassing).length} check(s) failed.`);
 	server.close();

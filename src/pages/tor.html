@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="referrer" content="no-referrer">
+	<title>Tor tab</title>
+	<link rel="stylesheet" href="tor.css">
+</head>
+<body>
+	<main>
+		<p class="kicker">Mog Browser · Tor tab</p>
+		<h1>You're on Tor</h1>
+		<p class="route">{{route}}</p>
+
+		<form action="https://html.duckduckgo.com/html/" method="get" class="search">
+			<input name="q" type="search" placeholder="Search DuckDuckGo over Tor" aria-label="Search DuckDuckGo over Tor" autocomplete="off" spellcheck="false" autofocus>
+			<button type="submit">Search</button>
+		</form>
+
+		<ul class="facts">
+			<li><strong>Routed through Tor.</strong> Sites see a Tor exit relay, not your IP address. Nothing in this tab can reach the network until Tor is connected.</li>
+			<li><strong>Bridges, automatically.</strong> If a direct connection is blocked, Mog tries the built-in obfs4, Snowflake and meek bridges on its own and remembers the one that worked.</li>
+			<li><strong>Safest mode, always.</strong> JavaScript, WebGL, remote fonts, SVG images and plugins are off on every site, and media only plays when you click it.</li>
+			<li><strong>Leaves no trace.</strong> No history or session is saved. Cookies and site data are wiped when you close your last Tor tab.</li>
+		</ul>
+
+		<p class="links"><a href="https://check.torproject.org/">Check your Tor connection</a> · <a href="http://duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion/html/">DuckDuckGo onion</a></p>
+		<p class="note">For the strongest anonymity, use Tor Browser itself. Tor tabs give you Tor routing and Tor Browser's safest settings, but they run on Chromium, not Tor Browser's hardened Firefox.</p>
+	</main>
+</body>
+</html>

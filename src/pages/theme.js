@@ -56,7 +56,7 @@ const mogStrings = {
 	en: {
 		web: "Web", images: "Images", videos: "Videos", search: "Search", shields: "Shields", booster: "Booster",
 		searchHint: "Search {engine} or type a URL", searchEngine: "Search {engine}", secure: "SECURE", notSecure: "NOT SECURE",
-		newTab: "New tab", newPrivate: "New private tab", settings: "Settings and themes", boosterSettings: "Booster settings", find: "Find on page",
+		newTab: "New tab", newPrivate: "New private tab", newTor: "New Tor tab", settings: "Settings and themes", boosterSettings: "Booster settings", find: "Find on page",
 		screenshot: "Save screenshot", zoomIn: "Zoom in", zoomOut: "Zoom out", fullscreen: "Full screen", devtools: "Developer tools",
 		update: "Check for updates", clear: "Clear browsing data", china: "China mode 中文模式", themes: "Themes", countries: "Countries",
 		blocked: "ads and trackers mogged", rating: "Shields rating", customize: "Customize", history: "History", bookmarks: "Bookmarks",
@@ -67,7 +67,7 @@ const mogStrings = {
 	zh: {
 		web: "网页", images: "图片", videos: "视频", search: "搜索", shields: "护盾", booster: "增强器",
 		searchHint: "用{engine}搜索或输入网址", searchEngine: "用{engine}搜索", secure: "安全", notSecure: "不安全",
-		newTab: "新标签页", newPrivate: "新建隐私标签页", settings: "设置和主题", boosterSettings: "增强器设置", find: "在页面中查找",
+		newTab: "新标签页", newPrivate: "新建隐私标签页", newTor: "新建 Tor 标签页", settings: "设置和主题", boosterSettings: "增强器设置", find: "在页面中查找",
 		screenshot: "保存截图", zoomIn: "放大", zoomOut: "缩小", fullscreen: "全屏", devtools: "开发者工具",
 		update: "检查更新", clear: "清除浏览数据", china: "中文模式 China mode", themes: "主题", countries: "国家",
 		blocked: "个广告和跟踪器已拦截", rating: "护盾等级", customize: "自定义", history: "历史记录", bookmarks: "书签",

@@ -4,12 +4,17 @@ const path = require("path");
 const { ElectronBlocker } = require("@ghostery/adblocker-electron");
 const cosmeticPreload = require.resolve("@ghostery/adblocker-electron-preload");
 const { getDomain, parse: parseHost } = require("tldts-experimental");
+const { Tor, routeName } = require("./tor");
 
 const root = path.join(__dirname, "..");
-const roots = { booster: path.join(root, "booster"), newtab: path.join(__dirname, "pages"), settings: path.join(__dirname, "pages") };
-const indexFiles = { newtab: "index.html", settings: "settings.html" };
+const roots = { booster: path.join(root, "booster"), newtab: path.join(__dirname, "pages"), settings: path.join(__dirname, "pages"), tor: path.join(__dirname, "pages") };
+const indexFiles = { newtab: "index.html", settings: "settings.html", tor: "tor.html" };
 const preloadWeb = path.join(root, "dist", "preload-web.js");
 const partitions = ["persist:mog", "mog-private"];
+const torPartition = "mog-tor";
+// Tor tabs present as Tor Browser on Windows, like every other Tor Browser user, whatever this machine is.
+const torUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0";
+const deadProxy = { proxyRules: "socks5://127.0.0.1:9", proxyBypassRules: "<-loopback>" };
 const homeUrl = "mog://newtab/";
 const mimeTypes = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml", ".woff2": "font/woff2", ".txt": "text/plain" };
 const trackingParams = /^(utm_\w+|fbclid|gclid|gclsrc|dclid|gbraid|wbraid|msclkid|mc_eid|mc_cid|igshid|igsh|yclid|twclid|ttclid|_hsenc|_hsmi|vero_id|oly_enc_id|oly_anon_id|s_cid|si)$/i;
@@ -27,6 +32,9 @@ app.userAgentFallback = app.userAgentFallback.replace(/ (Electron|mog-browser)\/
 let window = null;
 let worker = null;
 let blocker = null;
+let tor = null;
+let torSession = null;
+let hasTorTabs = false;
 const engines = {
 	google: { name: "Google", web: "https://www.google.com/search?q=%s", images: "https://www.google.com/search?q=%s&udm=2", videos: "https://www.google.com/search?q=%s&udm=7" },
 	duckduckgo: { name: "DuckDuckGo", web: "https://duckduckgo.com/?q=%s", images: "https://duckduckgo.com/?q=%s&iax=images&ia=images", videos: "https://duckduckgo.com/?q=%s&iax=videos&ia=videos" },
@@ -56,6 +64,7 @@ const defaults = {
 	panicUrl: "https://ssosza.edupage.org/",
 	home: { title: "MOG BROWSER", tagline: "Mog the trackers. Ascend the web.", showStats: true, showClock: true, showSites: true, showNotes: false, dim: 45, background: "", notes: "", sites: [] },
 	session: [],
+	torBridge: "",
 };
 const chinaTheme = { background: "#120303", text: "#fff3e0", accent: "#ffd447", hot: "#ff2d2d" };
 const backgroundTypes = { "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif" };
@@ -213,7 +222,7 @@ function suggest(text) {
 
 async function clearBrowsingData() {
 
-	for (const partition of partitions) {
+	for (const partition of [...partitions, torPartition]) {
 		const target = session.fromPartition(partition);
 		await target.clearStorageData();
 		await target.clearCache();
@@ -233,6 +242,7 @@ const hostOf = url => {
 };
 const isWeb = url => /^https?:\/\//i.test(url ?? "");
 const isBooster = event => String(event.senderFrame?.url ?? "").startsWith("mog://booster/");
+const isTorContents = contents => Boolean(torSession && contents && !contents.isDestroyed() && contents.session === torSession);
 const tabOf = id => {
 	const tab = tabs.get(id);
 	return tab ? { id: tab.id, windowId: 1, url: tab.url, title: tab.title, favIconUrl: tab.favIconUrl, active: tab.isActive } : null;
@@ -283,6 +293,12 @@ async function serveInternal(request) {
 		} catch {
 			return new Response("Not found", { status: 404 });
 		}
+	}
+
+	if (url.hostname === "tor" && (url.pathname === "/" || url.pathname === "/tor.html")) {
+		const route = tor?.state.status === "ready" ? (tor.state.route === "direct" ? "Direct connection to the Tor network" : `Bridge: ${routeName(tor.state.route)}`) : "Connecting";
+		const page = (await fs.promises.readFile(path.join(base, "tor.html"), "utf8")).replace("{{route}}", route.replace(/[<>&"]/g, ""));
+		return new Response(page, { headers: { "content-type": "text/html", "cache-control": "no-store" } });
 	}
 
 	const relative = decodeURIComponent(url.pathname).replace(/^\/+/, "") || indexFiles[url.hostname] || "index.html";
@@ -352,12 +368,71 @@ function setupSession(target, isFirst) {
 
 	});
 
-	target.on("will-download", (event, item) => {
-		const id = ++sequence;
-		const send = status => toUi("ui:download", { id, name: item.getFilename(), received: item.getReceivedBytes(), total: item.getTotalBytes(), status });
-		item.on("updated", () => send("progressing"));
-		item.once("done", (done, status) => send(status));
+	target.on("will-download", trackDownload);
+
+}
+
+function trackDownload(event, item) {
+
+	const id = ++sequence;
+	const send = status => toUi("ui:download", { id, name: item.getFilename(), received: item.getReceivedBytes(), total: item.getTotalBytes(), status });
+	item.on("updated", () => send("progressing"));
+	item.once("done", (done, status) => send(status));
+
+}
+
+// Tor tabs: every request goes through Tor, and nothing leaves until Tor has finished connecting.
+// Safest mode is always on: no JavaScript (set where the webview attaches), and no remote fonts, SVG images, plugins or WebGL.
+function setupTorSession(target) {
+
+	const isLocal = url => /^(mog|data|blob):/i.test(url);
+	target.protocol.handle("mog", request => {
+		const url = new URL(request.url);
+		const isAllowed = url.hostname === "tor" || (url.hostname === "booster" && url.pathname.startsWith("/fonts/"));
+		return isAllowed ? serveInternal(request) : new Response("Not found", { status: 404 });
 	});
+	target.setProxy(deadProxy);
+	target.setUserAgent(torUserAgent, "en-US,en");
+	target.setSpellCheckerEnabled(false);
+
+	target.webRequest.onBeforeRequest((details, callback) => {
+		if (isLocal(details.url)) return callback({});
+		if (tor?.state.status !== "ready" || !/^(https?|wss?):/i.test(details.url)) return callback({ cancel: true });
+		if (details.resourceType === "font" || details.resourceType === "object") return callback({ cancel: true });
+		callback({});
+	});
+
+	target.webRequest.onBeforeSendHeaders((details, callback) => {
+		const headers = {};
+		for (const [name, value] of Object.entries(details.requestHeaders)) {
+			if (!/^sec-ch-ua/i.test(name)) headers[name] = value;
+		}
+		if (isWeb(details.url)) headers["Accept-Language"] = "en-US,en;q=0.5";
+		callback({ requestHeaders: headers });
+	});
+
+	target.webRequest.onHeadersReceived((details, callback) => {
+		const type = Object.entries(details.responseHeaders ?? {}).find(([name]) => name.toLowerCase() === "content-type")?.[1]?.join(",") ?? "";
+		callback(details.resourceType === "image" && /svg/i.test(type) ? { cancel: true } : {});
+	});
+
+	target.setPermissionCheckHandler((contents, permission, origin) => permission === "fullscreen" || Boolean(origin?.startsWith("mog://")));
+	target.setPermissionRequestHandler((contents, permission, callback) => callback(permission === "fullscreen"));
+	target.on("will-download", trackDownload);
+
+}
+
+let torProxy = "";
+
+async function onTorState(state) {
+
+	const next = state.status === "ready" ? `socks5://127.0.0.1:${state.port}` : "";
+	if (next !== torProxy) {
+		torProxy = next;
+		await torSession.setProxy(next ? { proxyRules: next, proxyBypassRules: "<-loopback>" } : deadProxy);
+		await torSession.closeAllConnections().catch(() => {});
+	}
+	toUi("ui:tor-state", tor.state);
 
 }
 
@@ -387,6 +462,7 @@ function handleInput(event, input) {
 		else if (key === "l" && input.shift) shortcut = "lock-in";
 		else if (key === "x" && input.shift) shortcut = "panic";
 		else if (key === "b" && input.shift) shortcut = "booster";
+		else if (key === "o" && input.shift) shortcut = "new-tor";
 		else if (key === "Tab") shortcut = input.shift ? "previous-tab" : "next-tab";
 		else if (key === "=" || key === "+") shortcut = "zoom-in";
 		else if (key === "-") shortcut = "zoom-out";
@@ -410,6 +486,8 @@ function handleInput(event, input) {
 function setupGuest(contents) {
 
 	contents.on("before-input-event", handleInput);
+	const isTor = isTorContents(contents);
+	if (isTor) contents.setWebRTCIPHandlingPolicy("disable_non_proxied_udp");
 
 	contents.setWindowOpenHandler(({ url, disposition }) => {
 		if (isWeb(url)) toUi("ui:open", { url: settings.stripParams ? cleanUrl(url) : url, isBackground: disposition === "background-tab", openerId: contents.id });
@@ -442,7 +520,8 @@ function setupGuest(contents) {
 		const items = [];
 		if (params.linkURL) {
 			items.push({ label: "Open link in new tab", click: () => toUi("ui:open", { url: params.linkURL, isBackground: true, openerId: contents.id }) });
-			items.push({ label: "Open link in private tab", click: () => toUi("ui:open", { url: params.linkURL, isPrivate: true }) });
+			if (isTor) items.push({ label: "Open link in new Tor tab", click: () => toUi("ui:open", { url: params.linkURL, isTor: true }) });
+			else items.push({ label: "Open link in private tab", click: () => toUi("ui:open", { url: params.linkURL, isPrivate: true }) });
 			items.push({ label: "Copy link", click: () => clipboard.writeText(settings.stripParams ? cleanUrl(params.linkURL) : params.linkURL) });
 			items.push({ type: "separator" });
 		}
@@ -576,7 +655,7 @@ const boosterApi = {
 	"scripting.executeScript": async ({ tabId, func, args, files }) => {
 		const tab = tabs.get(tabId);
 		const contents = webContents.fromId(tabId);
-		if (!tab || !contents || !isWeb(contents.getURL())) throw new Error("Cannot access this page");
+		if (!tab || !contents || !isWeb(contents.getURL()) || isTorContents(contents)) throw new Error("Cannot access this page");
 		if (files || !func) return [{ result: null }];
 		return [{ result: await contents.executeJavaScript(`(${func})(...${JSON.stringify(args ?? [])})`, true) }];
 	},
@@ -631,7 +710,7 @@ function registerIpc() {
 
 		if (!isBooster(event)) throw new Error("blocked");
 		const contents = webContents.fromId(tabId);
-		if (!tabs.has(tabId) || !contents || !isWeb(contents.getURL())) throw new Error("Could not establish connection");
+		if (!tabs.has(tabId) || !contents || !isWeb(contents.getURL()) || isTorContents(contents)) throw new Error("Could not establish connection");
 
 		return new Promise((resolve, reject) => {
 			const id = ++sequence;
@@ -694,6 +773,7 @@ function registerIpc() {
 	ipcMain.handle("ui:init", event => isUi(event) ? { ...uiState(), session: settings.restoreSession ? settings.session : [] } : null);
 	ipcMain.handle("ui:settings", (event, patch) => isUi(event) ? applyPatch(patch) : null);
 	ipcMain.handle("ui:suggest", (event, text) => isUi(event) ? suggest(text) : []);
+	ipcMain.handle("ui:tor", event => isUi(event) && tor ? tor.start() : null);
 
 	ipcMain.handle("settings:get", event => isSettings(event) ? { ...uiState(), defaults: { theme: defaults.theme, home: defaults.home }, history: history.slice(0, 300) } : null);
 	ipcMain.handle("settings:set", (event, patch) => isSettings(event) ? applyPatch(patch) : null);
@@ -767,7 +847,11 @@ function registerIpc() {
 		if (!isUi(event) || !Array.isArray(list)) return;
 		tabs.clear();
 		for (const tab of list) tabs.set(tab.id, tab);
-		const open = list.filter(tab => !tab.isPrivate && (isWeb(tab.url) || tab.url.startsWith("mog://"))).slice(0, 30);
+		// Closing the last Tor tab wipes everything Tor tabs stored, much like New Identity in Tor Browser.
+		const hadTorTabs = hasTorTabs;
+		hasTorTabs = list.some(tab => tab.isTor);
+		if (hadTorTabs && !hasTorTabs && torSession) torSession.clearStorageData().then(() => torSession.clearCache()).catch(() => {});
+		const open = list.filter(tab => !tab.isPrivate && !tab.isTor && (isWeb(tab.url) || tab.url.startsWith("mog://"))).slice(0, 30);
 		settings.session = open.map(tab => ({ url: tab.url, isActive: Boolean(tab.isActive) }));
 		saveSettings();
 	});
@@ -780,7 +864,7 @@ function registerIpc() {
 			broadcast("booster:event", { name: "tabs.onRemoved", values: [id] });
 		} else if (type === "complete") {
 			const tab = tabs.get(id);
-			if (tab && isWeb(tab.url) && !tab.isPrivate && history[0]?.url !== tab.url) {
+			if (tab && isWeb(tab.url) && !tab.isPrivate && !tab.isTor && history[0]?.url !== tab.url) {
 				history.unshift({ url: tab.url, title: String(tab.title ?? "").slice(0, 120), time: Date.now() });
 				history.length = Math.min(history.length, 3000);
 				saveHistory();
@@ -896,11 +980,22 @@ function createWindow() {
 
 	window.webContents.on("will-attach-webview", (event, preferences, params) => {
 		delete preferences.preloadURL;
-		preferences.preload = preloadWeb;
 		preferences.contextIsolation = true;
 		preferences.nodeIntegration = false;
 		preferences.sandbox = true;
-		if (!partitions.includes(params.partition) || !/^(https?:|mog:)/i.test(params.src)) event.preventDefault();
+		if (params.partition === torPartition) {
+			// Safest mode, always: no scripts, WebGL or plugins, media waits for a click, and no page preload at all.
+			delete preferences.preload;
+			preferences.javascript = false;
+			preferences.webgl = false;
+			preferences.plugins = false;
+			preferences.spellcheck = false;
+			preferences.navigateOnDragDrop = false;
+			preferences.autoplayPolicy = "document-user-activation-required";
+		} else {
+			preferences.preload = preloadWeb;
+		}
+		if (![...partitions, torPartition].includes(params.partition) || !/^(https?:|mog:)/i.test(params.src)) event.preventDefault();
 	});
 	window.webContents.on("before-input-event", handleInput);
 	window.webContents.on("will-navigate", event => event.preventDefault());
@@ -946,6 +1041,15 @@ if (!app.requestSingleInstanceLock()) {
 		registerIpc();
 		await loadBlocker();
 		partitions.forEach((partition, index) => setupSession(session.fromPartition(partition), index === 0));
+		torSession = session.fromPartition(torPartition);
+		setupTorSession(torSession);
+		tor = new Tor({ bundled: app.isPackaged ? path.join(process.resourcesPath, "tor") : path.join(root, "vendor", "tor"), dataDir: dataFile("tor-data"), preferred: settings.torBridge });
+		tor.on("state", () => onTorState(tor.state).catch(() => {}));
+		tor.on("connected", route => {
+			settings.torBridge = route;
+			saveSettings();
+			toUi("ui:toast", route === "direct" ? "Connected to Tor." : `Connected to Tor through ${routeName(route)}.`);
+		});
 		if (settings.clearOnExit) {
 			await clearBrowsingData().catch(() => {});
 			settings.session = [];
@@ -958,6 +1062,7 @@ if (!app.requestSingleInstanceLock()) {
 	});
 
 	app.on("before-quit", () => {
+		tor?.kill();
 		try {
 			saveSettings(true);
 			saveStorage(true);
