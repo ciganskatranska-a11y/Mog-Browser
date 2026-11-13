@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, protocol, session, webContents } = require("electron");
+const { app, BrowserWindow, Menu, clipboard, dialog, ipcMain, nativeTheme, protocol, session, webContents } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { ElectronBlocker } = require("@ghostery/adblocker-electron");
@@ -54,12 +54,16 @@ const defaults = {
 	themeBefore: null,
 	flag: "",
 	panicUrl: "https://ssosza.edupage.org/",
-	home: { title: "MOG BROWSER", tagline: "Mog the trackers. Ascend the web.", showStats: true, showClock: true, showSites: true, showNotes: false, dim: 45, background: "", notes: "", sites: [] },
+	darkSites: true,
+	uiZoom: 1,
+	home: { showStats: true, showClock: true, showSites: true, showNotes: false, dim: 45, background: "", notes: "", sites: [], widgets: null },
 	session: [],
 };
+const widgetTypes = new Set(["title", "search", "sites", "clock", "stats", "notes", "todo", "site", "timer", "countdown", "calendar", "quote", "bookmarks", "history", "weather"]);
+const audioFile = /\.(?:mp3|ogg|oga|m4a|wav|flac|opus|aac)$/i;
 const chinaTheme = { background: "#120303", text: "#fff3e0", accent: "#ffd447", hot: "#ff2d2d" };
 const backgroundTypes = { "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp", "image/gif": ".gif" };
-const editable = ["shields", "blockCookies", "stripParams", "isCompact", "showBookmarks", "searchEngine", "searchMode", "restoreSession", "clearOnExit", "syncBoosterColors"];
+const editable = ["shields", "blockCookies", "stripParams", "isCompact", "showBookmarks", "searchEngine", "searchMode", "restoreSession", "clearOnExit", "syncBoosterColors", "darkSites"];
 let settings = structuredClone(defaults);
 let history = [];
 let historyTimer = 0;
@@ -131,17 +135,254 @@ function uiState() {
 function applyTheme() {
 
 	const { theme } = settings;
+	// Sites that ship a dark version get asked for it, whatever Windows is set to.
+	nativeTheme.themeSource = settings.darkSites ? "dark" : "system";
 	if (window && !window.isDestroyed()) {
-		window.setTitleBarOverlay({ color: theme.background, symbolColor: theme.accent, height: settings.isCompact ? 34 : 40 });
+		window.setTitleBarOverlay({ color: theme.background, symbolColor: theme.accent, height: stripHeight() });
 		window.setBackgroundColor(theme.background);
+		if (window.webContents.getZoomFactor() !== settings.uiZoom) window.webContents.setZoomFactor(settings.uiZoom);
 	}
 	const prefs = storage.local.prefs ?? {};
 	if (settings.syncBoosterColors && (prefs.accent !== theme.accent || prefs.hot !== theme.hot)) storageRequest("local", "set", { prefs: { ...prefs, accent: theme.accent, hot: theme.hot } });
 
 }
 
+const stripHeight = () => Math.round((settings.isCompact ? 34 : 40) * settings.uiZoom);
+
+// Ctrl+scroll on the home page sizes the whole browser: 0 resets, 1 and -1 step by ten percent.
+function stepZoom(direction) {
+
+	const next = direction === 0 ? 1 : Math.round((settings.uiZoom + Math.sign(direction) * .1) * 10) / 10;
+	settings.uiZoom = Math.max(.7, Math.min(2, next));
+	saveSettings();
+	applyTheme();
+	toUi("ui:state", uiState());
+	return settings.uiZoom;
+
+}
+
+function cleanWidgets(list) {
+
+	if (!Array.isArray(list)) return null;
+	const clamp = (value, minimum, maximum, fallback) => Number.isFinite(value) ? Math.max(minimum, Math.min(maximum, value)) : fallback;
+	const plain = (value, limit, fallback) => {
+		try {
+			const text = JSON.stringify(value ?? fallback);
+			return text.length <= limit ? JSON.parse(text) : fallback;
+		} catch {
+			return fallback;
+		}
+	};
+	const seen = new Set();
+	const widgets = [];
+	for (const item of list.slice(0, 40)) {
+		if (!item || !widgetTypes.has(item.type) || !/^[a-z0-9]{1,16}$/.test(item.id ?? "") || seen.has(item.id)) continue;
+		seen.add(item.id);
+		const options = plain(item.options, 20000, {});
+		widgets.push({
+			id: item.id,
+			type: item.type,
+			x: clamp(item.x, 0, 100, 50),
+			y: clamp(item.y, 0, 100, 50),
+			w: Math.round(clamp(item.w, 100, 2400, 320)),
+			h: Math.round(clamp(item.h, 0, 1600, 0)),
+			options: options && typeof options === "object" && !Array.isArray(options) ? options : {},
+			data: plain(item.data, 40000, null),
+		});
+	}
+	return widgets;
+
+}
+
+// Website widgets: read a site's own page and pull out what a small card can show.
+// Everything comes back as plain text and http(s) addresses, and the home page only ever sets it as text.
+const htmlEntities = { amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'", nbsp: " " };
+const plainText = (html, limit = 200) => String(html ?? "")
+	.replace(/<[^>]*>/g, " ")
+	.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, code) => {
+		if (code[0] !== "#") return htmlEntities[code.toLowerCase()] ?? " ";
+		const point = code[1].toLowerCase() === "x" ? parseInt(code.slice(2), 16) : Number(code.slice(1));
+		return point > 31 && point < 0x110000 ? String.fromCodePoint(point) : " ";
+	})
+	.replace(/\s+/g, " ")
+	.trim()
+	.slice(0, limit);
+const attribute = (tag, name) => {
+	const match = new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i").exec(tag);
+	return match ? plainText(match[1] ?? match[2] ?? match[3], 2000) : "";
+};
+const tagsOf = (html, name) => html.match(new RegExp(`<${name}\\b[^>]*>`, "gi")) ?? [];
+
+function absoluteUrl(value, base) {
+
+	if (!value) return "";
+	try {
+		const url = new URL(value, base);
+		return isWeb(url.href) && url.href.length <= 1000 ? url.href : "";
+	} catch {
+		return "";
+	}
+
+}
+
+async function fetchText(url, limit = 800000) {
+
+	const response = await fetch(url, {
+		redirect: "follow",
+		signal: AbortSignal.timeout(9000),
+		headers: { "user-agent": app.userAgentFallback, accept: "text/html,application/xhtml+xml,application/xml;q=.9,*/*;q=.8" },
+	});
+	if (!response.ok) throw new Error(`The site answered with error ${response.status}.`);
+	if (Number(response.headers.get("content-length")) > 6000000) throw new Error("That page is too big to read.");
+	return { text: (await response.text()).slice(0, limit), url: response.url || url };
+
+}
+
+// Finds audio files written into a page or its scripts, with the title, artist and cover that sit next to each one.
+function findTracks(source, base, tracks) {
+
+	const unquote = text => {
+		try {
+			return plainText(JSON.parse(`"${text.replace(/"/g, "\\\"")}"`), 90);
+		} catch {
+			return plainText(text, 90);
+		}
+	};
+	const near = (text, keys, isLast) => {
+		const matches = [...text.matchAll(new RegExp(`["']?\\b(?:${keys})["']?\\s*[:=]\\s*(["'\`])((?:\\\\.|(?!\\1)[^\\\\\\n])*)\\1`, "gi"))];
+		return (isLast ? matches.at(-1) : matches[0])?.[2] ?? "";
+	};
+	for (const match of source.matchAll(/["'`(]([^"'`()\s<>]{1,400}\.(?:mp3|ogg|oga|m4a|wav|flac|opus|aac)(?:\?[^"'`()\s<>]*)?)["'`)]/gi)) {
+		if (tracks.length >= 40) break;
+		const url = absoluteUrl(match[1].replace(/\\\//g, "/"), base);
+		if (!url) continue;
+		const before = source.slice(Math.max(0, match.index - 500), match.index);
+		const after = source.slice(match.index, match.index + 400);
+		const fileName = decodeURIComponent(new URL(url).pathname.split("/").pop()).replace(/\.\w+$/, "").replace(/[-_]+/g, " ");
+		const cover = /\.(?:png|jpe?g|webp|gif|avif)(?:\?|$)/i.test(near(after, "cover|image|artwork|art|thumbnail|poster")) ? absoluteUrl(near(after, "cover|image|artwork|art|thumbnail|poster").replace(/\\\//g, "/"), base) : "";
+		const found = { title: unquote(near(before, "title|name", true)), artist: unquote(near(before, "artist|author|by", true)), url, cover };
+		const known = tracks.find(track => track.url === url);
+		if (!known) tracks.push({ ...found, title: found.title || plainText(fileName, 90), isNamed: Boolean(found.title) });
+		else if (found.title && !known.isNamed) Object.assign(known, found, { isNamed: true });
+	}
+
+}
+
+async function readFeed(url) {
+
+	const { text } = await fetchText(url, 400000);
+	const posts = [];
+	for (const block of text.match(/<(item|entry)\b[\s\S]*?<\/\1>/gi) ?? []) {
+		if (posts.length >= 8) break;
+		const title = plainText(/<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(block)?.[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1"), 120);
+		const link = /<link\b[^>]*>([^<]+)<\/link>/i.exec(block)?.[1].trim() || attribute(tagsOf(block, "link").find(tag => !/rel\s*=\s*["']?(?!alternate)/i.test(tag)) ?? "", "href");
+		const address = absoluteUrl(plainText(link, 1000), url);
+		if (title && address) posts.push({ title, url: address });
+	}
+	return posts;
+
+}
+
+async function summarizeSite(input) {
+
+	const typed = String(input ?? "").trim().slice(0, 500);
+	const start = isWeb(typed) ? typed : `https://${typed}`;
+	if (!hostOf(start).includes(".")) throw new Error("Type a site address, like slopalbum.com.");
+
+	const { text: html, url } = await fetchText(start);
+	const host = hostOf(url).replace(/^www\./, "");
+	const meta = {};
+	for (const tag of tagsOf(html, "meta")) {
+		const key = (attribute(tag, "property") || attribute(tag, "name")).toLowerCase();
+		if (key && !(key in meta)) meta[key] = attribute(tag, "content");
+	}
+	const links = tagsOf(html, "link").map(tag => ({ rel: attribute(tag, "rel").toLowerCase(), type: attribute(tag, "type").toLowerCase(), as: attribute(tag, "as").toLowerCase(), href: attribute(tag, "href") }));
+	const iconLink = links.find(link => /\bicon\b/.test(link.rel) && link.href);
+	const icon = iconLink?.href.startsWith("data:image/") && iconLink.href.length < 6000 ? iconLink.href : absoluteUrl(iconLink?.href || "/favicon.ico", url);
+
+	const tracks = [];
+	for (const tag of [...tagsOf(html, "audio"), ...tagsOf(html, "source"), ...tagsOf(html, "a")]) {
+		const address = attribute(tag, "src") || attribute(tag, "href");
+		if (audioFile.test(address.split("?")[0])) findTracks(`"${address}"`, url, tracks);
+	}
+	findTracks(html, url, tracks);
+	if (/<audio\b/i.test(html) || tracks.length) {
+		const scripts = tagsOf(html, "script").map(tag => absoluteUrl(attribute(tag, "src"), url)).filter(address => address && hostOf(address) === hostOf(url)).slice(0, 8);
+		const sources = await Promise.all(scripts.map(address => fetchText(address, 600000).catch(() => null)));
+		for (const [index, source] of sources.entries()) {
+			if (source) findTracks(source.text, scripts[index], tracks);
+		}
+	}
+
+	const pages = [];
+	const body = /<(nav|header)\b[\s\S]*?<\/\1>/i.test(html) ? (html.match(/<(nav|header)\b[\s\S]*?<\/\1>/gi) ?? []).join(" ") + html : html;
+	for (const match of body.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
+		if (pages.length >= 12) break;
+		const address = absoluteUrl(attribute(`<a ${match[1]}>`, "href"), url);
+		const title = plainText(match[2], 40);
+		if (!address || title.length < 2 || address.split("#")[0] === url.split("#")[0] || audioFile.test(address.split("?")[0])) continue;
+		if (pages.some(page => page.url === address || page.title.toLowerCase() === title.toLowerCase())) continue;
+		pages.push({ title, url: address });
+	}
+
+	let search = "";
+	for (const form of html.match(/<form\b[\s\S]*?<\/form>/gi) ?? []) {
+		const field = tagsOf(form, "input").find(tag => /^(q|s|search|query|keyword|keywords|k|text)$/i.test(attribute(tag, "name")) || attribute(tag, "type").toLowerCase() === "search");
+		const name = field ? attribute(field, "name") : "";
+		const action = absoluteUrl(attribute(tagsOf(form, "form")[0], "action") || url, url);
+		if (!name || !action || /post/i.test(attribute(tagsOf(form, "form")[0], "method"))) continue;
+		search = `${action}${action.includes("?") ? "&" : "?"}${encodeURIComponent(name)}=%s`;
+		break;
+	}
+
+	const feedLink = links.find(link => link.rel.includes("alternate") && /rss|atom/.test(link.type) && link.href);
+	const posts = feedLink ? await readFeed(absoluteUrl(feedLink.href, url)).catch(() => []) : [];
+	const picture = meta["og:image"] || meta["twitter:image"] || links.find(link => link.rel.includes("preload") && link.as === "image")?.href || "";
+
+	return {
+		url,
+		host,
+		title: plainText(meta["og:site_name"] || /<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] || meta["og:title"], 80) || host,
+		description: plainText(meta.description || meta["og:description"] || meta["twitter:description"], 300),
+		image: absoluteUrl(picture, url) || tracks.find(track => track.cover)?.cover || "",
+		icon,
+		color: /^#[0-9a-f]{3,8}$/i.test(meta["theme-color"] ?? "") ? meta["theme-color"] : "",
+		tracks: tracks.map(({ title, artist, url: address, cover }) => ({ title, artist, url: address, cover })),
+		links: pages,
+		posts,
+		search,
+		at: Date.now(),
+	};
+
+}
+
+const weatherNames = [[0, "Clear"], [1, "Mostly clear"], [2, "Partly cloudy"], [3, "Overcast"], [48, "Fog"], [57, "Drizzle"], [67, "Rain"], [77, "Snow"], [82, "Showers"], [86, "Snow showers"], [99, "Thunderstorm"]];
+
+async function loadWeather(place, unit) {
+
+	const name = String(place ?? "").trim().slice(0, 80);
+	if (!name) throw new Error("Type a city.");
+	const found = JSON.parse((await fetchText(`https://geocoding-api.open-meteo.com/v1/search?count=1&name=${encodeURIComponent(name)}`)).text).results?.[0];
+	if (!found) throw new Error(`Couldn't find ${name}.`);
+	const isFahrenheit = unit === "f";
+	const query = `latitude=${found.latitude}&longitude=${found.longitude}&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=4&timezone=auto${isFahrenheit ? "&temperature_unit=fahrenheit&wind_speed_unit=mph" : ""}`;
+	const report = JSON.parse((await fetchText(`https://api.open-meteo.com/v1/forecast?${query}`)).text);
+	const label = code => weatherNames.find(([limit]) => code <= limit)?.[1] ?? "Weather";
+	return {
+		place: [found.name, found.country_code].filter(Boolean).join(", ").slice(0, 60),
+		unit: isFahrenheit ? "f" : "c",
+		temperature: Math.round(report.current.temperature_2m),
+		wind: Math.round(report.current.wind_speed_10m),
+		sky: label(report.current.weather_code),
+		days: report.daily.time.slice(0, 4).map((date, index) => ({ date, sky: label(report.daily.weather_code[index]), high: Math.round(report.daily.temperature_2m_max[index]), low: Math.round(report.daily.temperature_2m_min[index]) })),
+		at: Date.now(),
+	};
+
+}
+
 function applyPatch(patch) {
 
+	if (patch?.uiZoom === 1) settings.uiZoom = 1;
 	for (const key of editable) {
 		if (typeof patch?.[key] !== typeof defaults[key]) continue;
 		if (key === "searchEngine" && !engines[patch[key]]) continue;
@@ -159,7 +400,9 @@ function applyPatch(patch) {
 	for (const key of Object.keys(defaults.home)) {
 		const value = patch?.home?.[key];
 		if (key === "background" || value === undefined) continue;
-		if (key === "sites") {
+		if (key === "widgets") {
+			settings.home.widgets = cleanWidgets(value);
+		} else if (key === "sites") {
 			if (!Array.isArray(value)) continue;
 			settings.home.sites = value
 				.filter(site => site && typeof site.title === "string" && isWeb(site.url))
@@ -665,6 +908,17 @@ function registerIpc() {
 	ipcMain.handle("home:data", () => ({ ...uiState(), isShielded: settings.shields }));
 	ipcMain.handle("home:stats", () => ({ blockedTotal: settings.blockedTotal }));
 	ipcMain.handle("home:set", (event, patch) => isHome(event) ? applyPatch({ theme: patch?.theme, flag: patch?.flag, home: patch?.home, chinaMode: patch?.chinaMode }) : null);
+	ipcMain.handle("home:zoom", (event, direction) => isHome(event) ? stepZoom(Number(direction) || 0) : null);
+	ipcMain.handle("home:site", (event, url) => isHome(event) ? summarizeSite(url).catch(error => ({ error: String(error.message || error).slice(0, 120) })) : null);
+	ipcMain.handle("home:weather", (event, place, unit) => isHome(event) ? loadWeather(place, unit).catch(error => ({ error: String(error.message || error).slice(0, 120) })) : null);
+	ipcMain.handle("home:history", event => {
+		if (!isHome(event)) return [];
+		const seen = new Set();
+		return history.filter(item => !seen.has(item.url) && seen.add(item.url)).slice(0, 20).map(item => ({ title: item.title, url: item.url }));
+	});
+	ipcMain.on("ui:zoom", (event, direction) => {
+		if (event.sender === window?.webContents) stepZoom(Number(direction) || 0);
+	});
 	ipcMain.on("ui:update-install", event => {
 		if (event.sender !== window?.webContents || update.status !== "ready") return;
 		saveSettings(true);
@@ -706,6 +960,7 @@ function registerIpc() {
 			saveHistory();
 		} else if (name === "clear-data") await clearBrowsingData();
 		else if (name === "reset") return applyPatch({ ...structuredClone(defaults), shields: settings.shields });
+		else if (name === "reset-layout") return applyPatch({ home: { widgets: null } });
 		else if (name === "check-update") {
 			await checkForUpdates(true);
 			return uiState();
@@ -890,7 +1145,7 @@ function createWindow() {
 		title: "Mog Browser",
 		icon: path.join(roots.booster, "icons", "icon128.png"),
 		titleBarStyle: "hidden",
-		titleBarOverlay: { color: settings.theme.background, symbolColor: settings.theme.accent, height: settings.isCompact ? 34 : 40 },
+		titleBarOverlay: { color: settings.theme.background, symbolColor: settings.theme.accent, height: stripHeight() },
 		webPreferences: { preload: path.join(__dirname, "preload-ui.js"), webviewTag: true, contextIsolation: true, sandbox: true, nodeIntegration: false },
 	});
 
@@ -904,6 +1159,7 @@ function createWindow() {
 	});
 	window.webContents.on("before-input-event", handleInput);
 	window.webContents.on("will-navigate", event => event.preventDefault());
+	window.webContents.on("did-finish-load", () => window.webContents.setZoomFactor(settings.uiZoom));
 	window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 	window.on("enter-full-screen", () => toUi("ui:shortcut", "fullscreen-on"));
 	window.on("leave-full-screen", () => toUi("ui:shortcut", "fullscreen-off"));
@@ -940,6 +1196,7 @@ if (!app.requestSingleInstanceLock()) {
 
 		const saved = readJson("settings.json", {});
 		settings = { ...settings, ...saved, theme: { ...defaults.theme, ...saved.theme }, home: { ...defaults.home, ...saved.home } };
+		settings.uiZoom = Number.isFinite(settings.uiZoom) ? Math.max(.7, Math.min(2, settings.uiZoom)) : 1;
 		storage = { local: {}, sync: {}, ...readJson("booster-storage.json", {}), session: {} };
 		history = readJson("history.json", []);
 		Menu.setApplicationMenu(null);

@@ -1,6 +1,6 @@
-// Renders the installer, uninstaller and app icon artwork into build/.
+// Renders the installer and uninstaller artwork into build/, and packs build/icon.png into build/icon.ico.
 // Run with: electron scripts/installer-art.js   (the output is committed, so releases don't need to run it)
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, nativeImage } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const { pathToFileURL } = require("url");
@@ -32,13 +32,6 @@ const header = `<style>${base}
 	img { position: absolute; top: 12px; left: 10px; width: 32px; }
 	h1 { position: absolute; top: 13px; left: 50px; font-size: 19px; line-height: .95; font-weight: 800; }
 </style><div class="glow"></div><img src="${logo}"><h1>MOG<br>BROWSER</h1>`;
-
-const icon = size => `<style>${base}
-	body { width: ${size}px; height: ${size}px; background: transparent; }
-	div { position: absolute; inset: 0; background: radial-gradient(90% 90% at 80% 10%, #3a352a, #000 70%); }
-	i { position: absolute; inset: auto 0 0; height: ${Math.max(1, Math.round(size / 16))}px; background: linear-gradient(90deg, #e6dcc3, #d21f2b); }
-	img { position: absolute; inset: ${Math.round(size * .14)}px; width: ${size - 2 * Math.round(size * .14)}px; image-rendering: auto; }
-</style><div></div><i></i><img src="${logo}">`;
 
 let painter = null;
 
@@ -114,10 +107,9 @@ app.whenReady().then(async () => {
 	fs.writeFileSync(path.join(out, "uninstallerSidebar.bmp"), toBmp(await render(sidebar("IT'S OVER", "#d21f2b"), 164, 314)));
 	fs.writeFileSync(path.join(out, "installerHeader.bmp"), toBmp(await render(header, 150, 57)));
 
-	const icons = [];
-	for (const size of [256, 128, 64, 48, 32, 16]) icons.push(await render(icon(size), size, size));
-	fs.writeFileSync(path.join(out, "icon.ico"), toIco(icons));
-	fs.writeFileSync(path.join(out, "icon.png"), icons[0].toPNG());
+	// The app icon is the plain pill from build/icon.png, with nothing drawn behind it.
+	const pill = nativeImage.createFromPath(path.join(out, "icon.png"));
+	fs.writeFileSync(path.join(out, "icon.ico"), toIco([256, 128, 64, 48, 32, 16].map(size => pill.resize({ width: size, height: size, quality: "best" }))));
 	console.log("Installer artwork written to build/");
 	app.exit(0);
 

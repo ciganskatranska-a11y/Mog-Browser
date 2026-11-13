@@ -602,6 +602,7 @@ function createTab({ url, isPrivate = false, isBackground = false, openerId } = 
 			tab.isReady = true;
 			tab.id = view.getWebContentsId();
 		}
+		applyZoom(tab);
 		refresh();
 	});
 	view.addEventListener("did-start-loading", () => {
@@ -624,6 +625,7 @@ function createTab({ url, isPrivate = false, isBackground = false, openerId } = 
 			tab.favicon = "";
 			clearFailure(tab);
 		}
+		applyZoom(tab);
 		refresh();
 	};
 	view.addEventListener("did-navigate", onNavigate);
@@ -896,9 +898,21 @@ function toggleBooster() {
 	view.setAttribute("partition", "persist:mog");
 	view.setAttribute("src", "mog://booster/popup.html");
 	view.addEventListener("close", closePanels);
-	view.addEventListener("dom-ready", () => view.focus());
+	view.addEventListener("dom-ready", () => {
+		view.setZoomLevel(Math.log(state.settings.uiZoom || 1) / Math.log(1.2));
+		view.focus();
+	});
 	element("boosterPanel").replaceChildren(view);
 	state.boosterView = view;
+
+}
+
+// Every page starts at the browser-wide size (Ctrl+scroll on the home page) and adds its own tab zoom on top.
+function applyZoom(tab) {
+
+	if (!tab.isReady) return;
+	const base = Math.log(state.settings.uiZoom || 1) / Math.log(1.2);
+	tab.view.setZoomLevel(base + (tab.url.startsWith("mog:") ? 0 : tab.zoom));
 
 }
 
@@ -906,8 +920,9 @@ function setZoom(direction) {
 
 	const tab = state.active;
 	if (!tab?.isReady) return;
+	if (tab.url.startsWith("mog:")) return window.mog.send("ui:zoom", direction);
 	tab.zoom = direction === 0 ? 0 : Math.max(-4, Math.min(6, tab.zoom + direction * .5));
-	tab.view.setZoomLevel(tab.zoom);
+	applyZoom(tab);
 	toast(`Zoom ${Math.round(1.2 ** tab.zoom * 100)}%`);
 
 }
@@ -932,8 +947,12 @@ function applyState(next) {
 
 	if (!next) return;
 	if (state.settings.searchMode !== next.settings.searchMode || !state.isLoaded) state.mode = next.settings.searchMode;
+	const previousZoom = state.isLoaded ? state.settings.uiZoom : next.settings.uiZoom;
 	state.isLoaded = true;
 	state.settings = next.settings;
+	document.documentElement.style.setProperty("--controls", `${Math.ceil(144 / (next.settings.uiZoom || 1))}px`);
+	for (const tab of state.tabs) applyZoom(tab);
+	if (previousZoom !== next.settings.uiZoom) toast(`Browser size ${Math.round(next.settings.uiZoom * 100)}%. Ctrl+0 on the home page resets it.`);
 	state.search = next.search;
 	state.bookmarks = next.bookmarks;
 	state.blockedTotal = next.blockedTotal;

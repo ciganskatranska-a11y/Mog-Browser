@@ -671,3 +671,4 @@ label.item {
 		flex-wrap: wrap;
 	}
 }
+a.button { text-decoration: none; }

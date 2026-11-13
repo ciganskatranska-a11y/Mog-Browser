@@ -1,7 +1,7 @@
 {
 	"name": "mog-browser",
 	"productName": "Mog Browser",
-	"version": "1.1.0",
+	"version": "1.2.0",
 	"description": "A blackpill themed browser with built-in shields and the Blackpill Booster.",
 	"main": "src/main.js",
 	"scripts": {

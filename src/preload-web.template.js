@@ -24,6 +24,10 @@ if (isInternal && location.hostname === "booster") {
 		data: () => ipcRenderer.invoke("home:data"),
 		stats: () => ipcRenderer.invoke("home:stats"),
 		set: patch => ipcRenderer.invoke("home:set", patch),
+		zoom: direction => ipcRenderer.invoke("home:zoom", direction),
+		site: url => ipcRenderer.invoke("home:site", url),
+		weather: (place, unit) => ipcRenderer.invoke("home:weather", place, unit),
+		history: () => ipcRenderer.invoke("home:history"),
 		background: (bytes, type) => ipcRenderer.invoke("home:background", bytes, type),
 	});
 

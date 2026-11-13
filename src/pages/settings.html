@@ -64,6 +64,7 @@
 				<div class="list">
 					<label class="item"><span><b>Compact toolbar</b><small>Smaller tabs and address bar, more room for the page.</small></span><input class="switch" type="checkbox" role="switch" data-key="isCompact"></label>
 					<label class="item"><span><b>Bookmarks bar</b><small>Show your bookmarks under the address bar.</small></span><input class="switch" type="checkbox" role="switch" data-key="showBookmarks"></label>
+					<label class="item"><span><b>Dark mode on websites</b><small>Sites that have a dark version show it automatically. Reload open pages after changing this.</small></span><input class="switch" type="checkbox" role="switch" data-key="darkSites"></label>
 					<label class="item"><span><b>Match the Booster</b><small>Use these colours in the Blackpill Booster too.</small></span><input class="switch" type="checkbox" role="switch" data-key="syncBoosterColors"></label>
 				</div>
 			</section>
@@ -72,18 +73,17 @@
 				<h1>Home page</h1>
 				<p class="lead">What you see on every new tab.</p>
 
-				<h2>Text</h2>
-				<div class="list">
-					<label class="item"><span><b>Title</b></span><input type="text" maxlength="60" data-home="title"></label>
-					<label class="item"><span><b>Tagline</b><small>Leave empty to hide it.</small></span><input type="text" maxlength="60" data-home="tagline"></label>
-				</div>
-
 				<h2>Widgets</h2>
 				<div class="list">
-					<label class="item"><span><b>Clock</b></span><input class="switch" type="checkbox" role="switch" data-home="showClock"></label>
-					<label class="item"><span><b>Shields stats</b><small>Live count of blocked ads and trackers.</small></span><input class="switch" type="checkbox" role="switch" data-home="showStats"></label>
-					<label class="item"><span><b>Site tiles</b></span><input class="switch" type="checkbox" role="switch" data-home="showSites"></label>
-					<label class="item"><span><b>Notes</b><small>A sticky note that saves as you type.</small></span><input class="switch" type="checkbox" role="switch" data-home="showNotes"></label>
+					<div class="item"><span><b>Layout</b><small>On the home page, press the layout button in the bottom right corner to move, resize, add and remove widgets.</small></span>
+						<span class="actions">
+							<a class="button" href="mog://newtab/">Open home page</a>
+							<button id="resetLayout" class="button" type="button">Reset layout</button>
+						</span>
+					</div>
+					<div class="item"><span><b>Browser size</b><small id="zoomState">Hold Ctrl and scroll on the home page to make the whole browser bigger or smaller.</small></span>
+						<span class="actions"><button id="resetZoom" class="button" type="button">Back to 100%</button></span>
+					</div>
 				</div>
 
 				<h2>Background</h2>

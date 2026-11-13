@@ -13,7 +13,10 @@ Download `MogBrowser-Setup.exe` from the latest [release](../../releases/latest)
 - **Search:** Google by default. Switch between web, images and videos, or type `image:` or `video:` (short forms `i:` and `v:`) before a search. DuckDuckGo, Brave Search and Bing are also available.
 - **Address bar:** autofills popular sites (YouTube, Instagram, TikTok, Reddit and more) as you type.
 - **Themes:** 12 presets, 16 country themes with a flag stripe, and custom colours.
-- **Home page:** gradient backdrop or your own image, live Shields stats, a clock, a notes widget, and site tiles you can add and remove.
+- **Home page:** a free canvas of widgets. Press the layout button in the corner to drag them anywhere, resize them, and add more: clock, Shields stats, notes, to-do, focus timer, countdown, calendar, weather, bookmarks, recent pages, site tiles and a motto. Every widget has settings for what it shows.
+- **Website widgets:** type any site and get a card built from it, with its music player, latest posts, links, picture and search. You pick which parts to show.
+- **Browser size:** hold Ctrl and scroll on the home page to make the whole browser bigger or smaller.
+- **Dark mode:** sites that have a dark version show it automatically (switch in Settings).
 - **Emergency button:** the page icon next to Shields (Ctrl+Shift+X) closes every tab and opens a page you choose in Settings.
 - **Offline game:** a bonesmash clicker on the error page when a site cannot be reached.
 - **China mode 中文模式:** Baidu search, Chinese interface and site tiles, and a Chinese-language request header to every site.

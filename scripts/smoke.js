@@ -76,21 +76,55 @@ app.whenReady().then(async () => {
 	const home = await inUi("({ count: state.tabs.length, url: state.active.url, id: state.active.id, title: state.active.title, bookmarks: state.bookmarks.map(item => item.title) })");
 	check("home tab opens", home.count === 1 && home.url === "mog://newtab/" && home.id > 0, JSON.stringify(home));
 	check("built-in sites are in the bookmarks bar", home.bookmarks.includes("SlopAlbum") && home.bookmarks.includes("Looksmax.org"));
-	const homePage = await webContents.fromId(home.id).executeJavaScript("({ sites: [...document.querySelectorAll('#sites a.tile span')].map(node => node.textContent), add: document.querySelectorAll('#sites .is-add').length, gradient: getComputedStyle(document.querySelector('.backdrop i')).backgroundImage.includes('radial-gradient'), dock: document.querySelectorAll('.dock a, .dock button').length, clock: document.getElementById('time').children.length, font: document.fonts.check('800 20px \"Barlow Condensed\"') })", true);
-	check("home page renders", homePage.sites.length === 12 && homePage.sites.includes("YouTube") && homePage.sites.includes("Looksmax.org") && homePage.dock === 5 && homePage.clock === 5 && homePage.font && homePage.add === 1 && homePage.gradient, JSON.stringify(homePage));
+	const homePage = await webContents.fromId(home.id).executeJavaScript("({ sites: [...document.querySelectorAll('#sites a.tile span')].map(node => node.textContent), title: document.querySelector('.mog-title h1').getAttribute('aria-label'), pill: document.querySelectorAll('.mog-title .pill-logo').length, modes: document.querySelectorAll('.modes, .tagline').length, gradient: getComputedStyle(document.querySelector('.backdrop i')).backgroundImage.includes('radial-gradient'), dock: document.querySelectorAll('.dock a, .dock button').length, clock: document.querySelector('.clock-time').children.length, font: document.fonts.check('800 20px \"Barlow Condensed\"') })", true);
+	check("home page renders", homePage.sites.length === 12 && homePage.sites.includes("YouTube") && homePage.sites.includes("Looksmax.org") && homePage.dock === 6 && homePage.clock === 5 && homePage.font && homePage.gradient, JSON.stringify(homePage));
+
+	check("home page shows the pill and MOG, with no tagline or search tabs", homePage.title === "MOG" && homePage.pill === 1 && homePage.modes === 0, JSON.stringify(homePage));
+	check("active tab highlight is not a window drag zone", (await inUi("getComputedStyle(element('tabGlider')).webkitAppRegion")) === "no-drag");
 
 	const homeContents = webContents.fromId(home.id);
 	await homeContents.executeJavaScript("document.getElementById('editSites').click(); document.querySelector('.is-add').click(); document.getElementById('siteName').value = 'Kick clips'; document.getElementById('siteUrl').value = 'kick.com/clips'; document.getElementById('addSite').requestSubmit()", true);
 	await wait(700);
 	const tiles = await homeContents.executeJavaScript("[...document.querySelectorAll('#sites a.tile span')].map(node => node.textContent)", true);
 	check("home page: add your own site tile", tiles.length === 13 && tiles.at(-1) === "Kick clips", JSON.stringify(tiles.slice(-3)));
-	await homeContents.executeJavaScript("document.querySelector('[data-home=showNotes]').click()", true);
+	await homeContents.executeJavaScript("element('editLayout').click(); addWidget('notes')", true);
 	await wait(500);
-	await homeContents.executeJavaScript("const n = document.getElementById('notesText'); n.value = 'mog harder'; n.dispatchEvent(new Event('input'))", true);
-	await wait(800);
-	const widget = await homeContents.executeJavaScript("window.mogHome.data().then(data => ({ notes: data.settings.home.notes, shown: !document.getElementById('notes').hidden }))", true);
-	check("home page: notes widget saves", widget.notes === "mog harder" && widget.shown, JSON.stringify(widget));
-	await homeContents.executeJavaScript("window.mogHome.set({ home: { sites: [], showNotes: false, notes: '' } })", true);
+	await homeContents.executeJavaScript("const n = document.querySelector('.notes-text'); n.value = 'mog harder'; n.dispatchEvent(new Event('input'))", true);
+	await wait(900);
+	const widget = await homeContents.executeJavaScript("window.mogHome.data().then(data => ({ notes: data.settings.home.widgets?.find(item => item.type === 'notes')?.options.text, editing: document.body.classList.contains('is-editing'), gallery: document.querySelectorAll('.gallery-item').length }))", true);
+	check("home page: added notes widget saves", widget.notes === "mog harder" && widget.editing && widget.gallery >= 15, JSON.stringify(widget));
+
+	const moved = await homeContents.executeJavaScript(`(async () => {
+		const clock = home.widgets.find(item => item.type === "clock");
+		const box = home.boxes.get(clock.id);
+		const start = box.getBoundingClientRect();
+		const fire = (type, x, y) => box.dispatchEvent(new PointerEvent(type, { bubbles: true, button: 0, pointerId: 1, clientX: x, clientY: y, altKey: true }));
+		box.setPointerCapture = () => {};
+		fire("pointerdown", start.left + 20, start.top + 20);
+		fire("pointermove", start.left - 380, start.top + 320);
+		fire("pointerup", start.left - 380, start.top + 320);
+		await new Promise(resolve => setTimeout(resolve, 600));
+		const saved = (await window.mogHome.data()).settings.home.widgets.find(item => item.type === "clock");
+		const end = box.getBoundingClientRect();
+		return { dx: Math.round(end.left - start.left), dy: Math.round(end.top - start.top), x: Math.round(saved.x), y: Math.round(saved.y) };
+	})()`, true);
+	check("home page: widgets drag anywhere and stay there", moved.dx === -400 && moved.dy === 300 && moved.x > 0 && moved.x < 100 && moved.y > 0, JSON.stringify(moved));
+
+	await homeContents.executeJavaScript(`addWidget("site"); (() => { const card = home.widgets.find(item => item.type === "site"); card.options = { url: ${JSON.stringify(page)} }; fill(card); })()`, true);
+	await wait(2500);
+	const card = await homeContents.executeJavaScript("({ player: document.querySelectorAll('.site-card .player').length, name: document.querySelector('.site-names strong')?.textContent, track: document.querySelector('.player-title')?.textContent })", true);
+	check("home page: website widget builds a music player from the site", card.player === 1 && card.name === "Smoke page" && card.track === "tone", JSON.stringify(card));
+	await homeContents.executeJavaScript("(() => { const card = home.widgets.find(item => item.type === 'site'); openOptions(card); document.querySelector('#options [data-option=showPlayer]').click(); })()", true);
+	await wait(300);
+	check("home page: widget settings choose what a widget shows", (await homeContents.executeJavaScript("document.querySelectorAll('.site-card .player').length", true)) === 0);
+
+	await homeContents.executeJavaScript("dispatchEvent(new WheelEvent('wheel', { deltaY: -100, ctrlKey: true, cancelable: true }))", true);
+	await wait(700);
+	const zoomed = await inUi("({ zoom: state.settings.uiZoom, width: innerWidth })");
+	check("Ctrl+scroll on the home page sizes the whole browser", zoomed.zoom === 1.1 && zoomed.width < 1300 && Math.abs((await homeContents.executeJavaScript("devicePixelRatio", true)) / (await inUi("devicePixelRatio")) - 1) < .01, JSON.stringify(zoomed));
+	await homeContents.executeJavaScript("window.mogHome.zoom(0)", true);
+	await homeContents.executeJavaScript("setEditing(false); resetLayout().then(() => window.mogHome.set({ home: { sites: [] } }))", true);
+	await wait(500);
 
 	const square = await inUi("[...document.querySelectorAll('.tab, .address, .pill, .panel, .icon')].every(node => getComputedStyle(node).borderRadius === '0px')");
 	check("browser chrome has no rounded corners", square);
@@ -146,6 +180,7 @@ app.whenReady().then(async () => {
 
 	await guest.executeJavaScript("location.href = location.pathname + '?fbclid=abc&keep=1'", true);
 	await wait(1500);
+	check("websites are asked for their dark version", await guest.executeJavaScript("matchMedia('(prefers-color-scheme: dark)').matches", true));
 	check("tracking parameters are stripped", !guest.getURL().includes("fbclid") && guest.getURL().includes("keep=1"), guest.getURL());
 
 	await guest.executeJavaScript("document.getElementById('tone').play().catch(() => {})", true);

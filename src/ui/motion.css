@@ -99,6 +99,8 @@ body.is-locked-in {
 .tab-glider {
 	position: absolute;
 	inset: 0 auto 0 0;
+	/* The strip drags the window and that is inherited. Without this the highlight turns the active tab back into a drag zone, and Windows swallows clicks on its close button. */
+	-webkit-app-region: no-drag;
 	width: 0;
 	background: var(--raised);
 	box-shadow: inset 0 2px 0 var(--ambient);

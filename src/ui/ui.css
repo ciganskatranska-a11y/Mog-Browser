@@ -117,7 +117,7 @@ body.is-fullscreen #chrome {
 	display: flex;
 	align-items: stretch;
 	height: var(--strip);
-	padding-right: 144px;
+	padding-right: var(--controls, 144px);
 	border-bottom: 1px solid var(--line);
 	-webkit-app-region: drag;
 }

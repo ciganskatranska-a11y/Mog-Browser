@@ -173,6 +173,9 @@ function render(data) {
 	element("removeBackground").hidden = !custom.background;
 	element("backgroundState").textContent = custom.background ? "Using your image." : "Using the theme gradient.";
 	element("resetSites").hidden = !custom.sites.length;
+	element("resetLayout").hidden = !custom.widgets;
+	element("resetZoom").hidden = settings.uiZoom === 1;
+	element("zoomState").textContent = `Hold Ctrl and scroll on the home page to make the whole browser bigger or smaller. Now at ${Math.round(settings.uiZoom * 100)}%.`;
 	renderRows(element("siteList"), custom.sites, (site, index) => [
 		el("span", "", hostOf(site.url)),
 		removeButton(`Remove ${site.title}`, () => save({ home: { sites: custom.sites.filter((item, position) => position !== index) } })),
@@ -234,6 +237,8 @@ function bindEvents() {
 		save({ home: { sites: [...current.settings.home.sites, { title, url }] } });
 	});
 	element("resetSites").addEventListener("click", () => save({ home: { sites: [] } }));
+	element("resetLayout").addEventListener("click", () => act("reset-layout"));
+	element("resetZoom").addEventListener("click", () => save({ uiZoom: 1 }));
 
 	element("panicUrl").addEventListener("change", event => save({ panicUrl: event.target.value }));
 	element("historyFilter").addEventListener("input", renderHistory);
