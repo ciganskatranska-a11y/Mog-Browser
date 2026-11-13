@@ -28,6 +28,7 @@ if (isInternal && location.hostname === "booster") {
 		site: url => ipcRenderer.invoke("home:site", url),
 		weather: (place, unit) => ipcRenderer.invoke("home:weather", place, unit),
 		history: () => ipcRenderer.invoke("home:history"),
+		onChange: handler => ipcRenderer.on("home:changed", () => handler()),
 		background: (bytes, type) => ipcRenderer.invoke("home:background", bytes, type),
 	});
 

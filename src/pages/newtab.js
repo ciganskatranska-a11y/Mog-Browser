@@ -14,6 +14,8 @@ const home = {
 	countFrame: 0,
 	saveTimer: 0,
 	zoomTimer: 0,
+	syncTimer: 0,
+	isDefault: false,
 	layer: 1,
 	optionsFor: "",
 	isEditing: false,
@@ -56,7 +58,12 @@ function defaultWidgets(custom) {
 function persist(isNow) {
 
 	clearTimeout(home.saveTimer);
-	const write = () => window.mogHome.set({ home: { widgets: home.widgets } }).catch(() => {});
+	home.saveTimer = 0;
+	const write = () => {
+		home.saveTimer = 0;
+		home.isDefault = false;
+		return window.mogHome.set({ home: { widgets: home.widgets } }).catch(() => {});
+	};
 	if (isNow) return write();
 	home.saveTimer = setTimeout(write, 250);
 	return undefined;
@@ -575,7 +582,7 @@ function setEditing(isEditing) {
 	if (!isEditing) {
 		closeOptions();
 		setPanel("gallery", false);
-		persist(true);
+		if (home.saveTimer) persist(true);
 	} else {
 		setPanel("customize", false);
 	}
@@ -597,9 +604,61 @@ async function resetLayout() {
 	const next = await window.mogHome.set({ home: { widgets: null } });
 	if (!next) return;
 	home.data = next;
+	home.isDefault = true;
 	home.widgets = defaultWidgets(next.settings.home);
 	renderWidgets();
 	setEditing(home.isEditing);
+
+}
+
+// Another home page (or Settings) saved something: take over its widgets, redrawing only the ones that changed
+// so a playing song or a half-typed note in an untouched widget carries on.
+async function sync() {
+
+	const data = await window.mogHome.data().catch(() => null);
+	if (!data) return;
+	const hadSites = JSON.stringify([home.data.settings.home.sites, home.data.bookmarks]);
+	render(data, false);
+
+	const custom = data.settings.home;
+	if (JSON.stringify([custom.sites, data.bookmarks]) !== hadSites) {
+		rerenderType("sites");
+		rerenderType("bookmarks");
+	}
+	if (!Array.isArray(custom.widgets) && home.isDefault) return;
+	const next = Array.isArray(custom.widgets) ? custom.widgets.filter(widget => widgetTypes[widget.type]) : defaultWidgets(custom);
+	const content = widget => JSON.stringify([widget.type, widget.options, widget.data]);
+	const known = new Map(home.widgets.map(widget => [widget.id, widget]));
+	const fresh = [];
+
+	clearTimeout(home.saveTimer);
+	home.saveTimer = 0;
+	closeOptions();
+	home.isDefault = !Array.isArray(custom.widgets);
+	home.widgets = next.map(widget => {
+		const mine = known.get(widget.id);
+		if (!mine || mine.type !== widget.type) {
+			fresh.push(widget);
+			return widget;
+		}
+		known.delete(widget.id);
+		const isSame = content(mine) === content(widget);
+		Object.assign(mine, widget);
+		size(mine);
+		if (isSame) place(mine);
+		else fill(mine);
+		return mine;
+	});
+	for (const gone of known.values()) {
+		home.cleanups.get(gone.id)?.();
+		home.cleanups.delete(gone.id);
+		home.boxes.get(gone.id)?.remove();
+		home.boxes.delete(gone.id);
+	}
+	for (const widget of fresh) mount(widget);
+	for (const widget of home.widgets) home.boxes.get(widget.id).style.zIndex = ++home.layer;
+	for (const box of home.boxes.values()) box.querySelector(".widget-body").inert = home.isEditing;
+	renderGallery();
 
 }
 
@@ -634,6 +693,7 @@ function render(data, isFirst) {
 
 	if (isFirst) {
 		home.shownTotal = data.blockedTotal;
+		home.isDefault = !Array.isArray(custom.widgets);
 		home.widgets = Array.isArray(custom.widgets) ? custom.widgets.filter(widget => widgetTypes[widget.type]) : defaultWidgets(custom);
 		renderWidgets();
 	} else if (wasChinese !== home.isChinese) {
@@ -697,7 +757,13 @@ function bindEvents() {
 		placeAll();
 		closeOptions();
 	});
-	addEventListener("pagehide", () => persist(true));
+	addEventListener("pagehide", () => {
+		if (home.saveTimer) persist(true);
+	});
+	window.mogHome.onChange(() => {
+		clearTimeout(home.syncTimer);
+		home.syncTimer = setTimeout(sync, 120);
+	});
 
 	element("backgroundFile").addEventListener("change", async event => {
 		const [file] = event.target.files;

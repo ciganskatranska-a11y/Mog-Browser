@@ -380,7 +380,16 @@ async function loadWeather(place, unit) {
 
 }
 
-function applyPatch(patch) {
+// Tells every other open home page that something changed, so they redraw without a reload.
+function notifyHomes(sender) {
+
+	for (const contents of webContents.getAllWebContents()) {
+		if (contents !== sender && !contents.isDestroyed() && contents.getURL().startsWith("mog://newtab/")) contents.send("home:changed");
+	}
+
+}
+
+function applyPatch(patch, sender) {
 
 	if (patch?.uiZoom === 1) settings.uiZoom = 1;
 	for (const key of editable) {
@@ -427,6 +436,7 @@ function applyPatch(patch) {
 	saveSettings();
 	applyTheme();
 	toUi("ui:state", uiState());
+	notifyHomes(sender);
 	return uiState();
 
 }
@@ -907,7 +917,7 @@ function registerIpc() {
 	const isHome = event => String(event.senderFrame?.url ?? "").startsWith("mog://newtab/");
 	ipcMain.handle("home:data", () => ({ ...uiState(), isShielded: settings.shields }));
 	ipcMain.handle("home:stats", () => ({ blockedTotal: settings.blockedTotal }));
-	ipcMain.handle("home:set", (event, patch) => isHome(event) ? applyPatch({ theme: patch?.theme, flag: patch?.flag, home: patch?.home, chinaMode: patch?.chinaMode }) : null);
+	ipcMain.handle("home:set", (event, patch) => isHome(event) ? applyPatch({ theme: patch?.theme, flag: patch?.flag, home: patch?.home, chinaMode: patch?.chinaMode }, event.sender) : null);
 	ipcMain.handle("home:zoom", (event, direction) => isHome(event) ? stepZoom(Number(direction) || 0) : null);
 	ipcMain.handle("home:site", (event, url) => isHome(event) ? summarizeSite(url).catch(error => ({ error: String(error.message || error).slice(0, 120) })) : null);
 	ipcMain.handle("home:weather", (event, place, unit) => isHome(event) ? loadWeather(place, unit).catch(error => ({ error: String(error.message || error).slice(0, 120) })) : null);
@@ -937,6 +947,7 @@ function registerIpc() {
 			settings.home.background = name;
 		}
 		saveSettings();
+		notifyHomes(event.sender);
 		return uiState();
 
 	});

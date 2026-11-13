@@ -118,6 +118,16 @@ app.whenReady().then(async () => {
 	await wait(300);
 	check("home page: widget settings choose what a widget shows", (await homeContents.executeJavaScript("document.querySelectorAll('.site-card .player').length", true)) === 0);
 
+	await inUi("void createTab({ url: 'mog://newtab/', isBackground: true })");
+	await wait(1500);
+	const twin = webContents.fromId(await inUi("state.tabs.at(-1).id"));
+	await homeContents.executeJavaScript("addWidget('todo'); (() => { const clock = home.widgets.find(item => item.type === 'clock'); clock.options = { showSeconds: true }; fill(clock); persist(); })()", true);
+	await wait(1200);
+	const synced = await twin.executeJavaScript("({ todo: document.querySelectorAll('.widget-box.is-todo').length, digits: document.querySelector('.clock-time').children.length, same: JSON.stringify(home.widgets.map(item => item.id)) })", true);
+	const source = await homeContents.executeJavaScript("JSON.stringify(home.widgets.map(item => item.id))", true);
+	check("home page: other open home pages update when a widget is saved", synced.todo === 1 && synced.digits === 8 && synced.same === source, JSON.stringify(synced));
+	await inUi("closeTab(state.tabs.at(-1), true)");
+
 	await homeContents.executeJavaScript("dispatchEvent(new WheelEvent('wheel', { deltaY: -100, ctrlKey: true, cancelable: true }))", true);
 	await wait(700);
 	const zoomed = await inUi("({ zoom: state.settings.uiZoom, width: innerWidth })");
