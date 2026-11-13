@@ -205,6 +205,7 @@ const plainText = (html, limit = 200) => String(html ?? "")
 		return point > 31 && point < 0x110000 ? String.fromCodePoint(point) : " ";
 	})
 	.replace(/\s+/g, " ")
+	.replace(/ ([,.;:!?])/g, "$1")
 	.trim()
 	.slice(0, limit);
 const attribute = (tag, name) => {
@@ -232,7 +233,7 @@ async function fetchText(url, limit = 800000) {
 		signal: AbortSignal.timeout(9000),
 		headers: { "user-agent": app.userAgentFallback, accept: "text/html,application/xhtml+xml,application/xml;q=.9,*/*;q=.8" },
 	});
-	if (!response.ok) throw new Error(`The site answered with error ${response.status}.`);
+	if (!response.ok) throw Object.assign(new Error(`The site answered with error ${response.status}.`), { status: response.status });
 	if (Number(response.headers.get("content-length")) > 6000000) throw new Error("That page is too big to read.");
 	return { text: (await response.text()).slice(0, limit), url: response.url || url };
 
@@ -268,6 +269,47 @@ function findTracks(source, base, tracks) {
 
 }
 
+// Sums up a page from its own words: the section headings, plus the few sentences that carry the most of what the page talks about.
+const fillerWords = new Set("about after also been being both could each from have here into just like more most much only other over same some such than that their them then there these they this those very were what when where which while will with would your yours".split(" "));
+
+function summarizeText(html) {
+
+	const body = html
+		.replace(/<!--[\s\S]*?-->/g, " ")
+		.replace(/<(script|style|noscript|svg|template|nav|footer|form|select|button|iframe)\b[\s\S]*?<\/\1>/gi, " ");
+	const headings = [];
+	for (const match of body.matchAll(/<h[1-3]\b[^>]*>([\s\S]*?)<\/h[1-3]>/gi)) {
+		const text = plainText(match[1], 80);
+		if (headings.length < 8 && text.length >= 3 && !headings.some(heading => heading.toLowerCase() === text.toLowerCase())) headings.push(text);
+	}
+
+	// Only real prose counts: paragraphs, and plain blocks of text with no markup inside. Menus and player controls are not sentences.
+	const blocks = [
+		...[...body.matchAll(/<(p|li|blockquote|dd|figcaption)\b[^>]*>([\s\S]*?)<\/\1>/gi)].map(match => match[2]),
+		...[...body.matchAll(/<(?:div|span|section|article|td)\b[^>]*>([^<]{80,3000})<\//gi)].map(match => match[1]),
+	].map(block => plainText(block, 3000)).filter(text => text.length >= 50 && text.includes(" "));
+	const sentences = [...new Set(blocks.flatMap(block => block.split(/(?<=[.!?。！？])\s+/)).map(sentence => sentence.trim()))].filter(sentence => sentence.length >= 35 && sentence.length <= 320 && /[.!?。！？]$/.test(sentence)).slice(0, 150);
+	const wordsOf = sentence => (sentence.toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? []).filter(word => !fillerWords.has(word));
+	const counts = new Map();
+	for (const sentence of sentences) {
+		for (const word of new Set(wordsOf(sentence))) counts.set(word, (counts.get(word) ?? 0) + 1);
+	}
+	const ranked = sentences
+		.map((sentence, index) => {
+			const words = wordsOf(sentence);
+			return { sentence, index, score: words.reduce((sum, word) => sum + counts.get(word), 0) / Math.sqrt(words.length || 1) + (index === 0 ? 3 : index < 3 ? 1.5 : 0) };
+		})
+		.sort((first, second) => second.score - first.score)
+		.slice(0, 3)
+		.sort((first, second) => first.index - second.index);
+	let summary = "";
+	for (const { sentence } of ranked) {
+		if (summary.length + sentence.length <= 460) summary += `${summary ? " " : ""}${sentence}`;
+	}
+	return { headings, summary };
+
+}
+
 async function readFeed(url) {
 
 	const { text } = await fetchText(url, 400000);
@@ -289,7 +331,12 @@ async function summarizeSite(input) {
 	const start = isWeb(typed) ? typed : `https://${typed}`;
 	if (!hostOf(start).includes(".")) throw new Error("Type a site address, like slopalbum.com.");
 
-	const { text: html, url } = await fetchText(start);
+	// Some sites refuse anything that is not a person in a browser. They still get a card, just a bare one.
+	const page = await fetchText(start).catch(error => {
+		if (!error.status) throw error;
+		return { text: "", url: start, note: "This site doesn't let apps read its pages, so this card only has the basics." };
+	});
+	const { text: html, url } = page;
 	const host = hostOf(url).replace(/^www\./, "");
 	const meta = {};
 	for (const tag of tagsOf(html, "meta")) {
@@ -340,6 +387,9 @@ async function summarizeSite(input) {
 	const picture = meta["og:image"] || meta["twitter:image"] || links.find(link => link.rel.includes("preload") && link.as === "image")?.href || "";
 
 	return {
+		version: 2,
+		note: page.note ?? "",
+		...summarizeText(html),
 		url,
 		host,
 		title: plainText(meta["og:site_name"] || /<title\b[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] || meta["og:title"], 80) || host,

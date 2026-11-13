@@ -32,9 +32,11 @@
 	<main id="canvas" class="canvas"></main>
 	<i id="guideX" class="guide is-x" hidden></i>
 	<i id="guideY" class="guide is-y" hidden></i>
+	<i id="marquee" class="marquee" hidden></i>
 
 	<div id="editBar" class="edit-bar" inert>
-		<span>Drag widgets anywhere. Pull a corner to resize.</span>
+		<span>Drag to move, pull a corner to resize. Hold Shift and click to select several.</span>
+		<button id="editRemove" type="button" class="chip is-hot" hidden><svg><use href="#i-close"/></svg>Remove 2</button>
 		<button id="editAdd" type="button" class="chip"><svg><use href="#i-plus"/></svg>Add widget</button>
 		<button id="editReset" type="button" class="chip is-quiet">Reset layout</button>
 		<button id="editDone" type="button" class="chip">Done</button>

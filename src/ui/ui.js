@@ -8,6 +8,7 @@ const state = {
 	tabs: [],
 	active: null,
 	closed: [],
+	stash: null,
 	settings: { shields: true, blockCookies: true, stripParams: true, shieldsOff: [], searchMode: "web", chinaMode: false, flag: "" },
 	update: { status: "idle", version: "", percent: 0 },
 	regionTimer: 0,
@@ -1079,13 +1080,28 @@ const actions = {
 	screenshot: () => state.active?.id && window.mog.send("ui:screenshot", state.active.id),
 	"lock-in": () => setLockIn(!document.body.classList.contains("is-locked-in")),
 	// Emergency button: every tab goes at once and one ordinary page takes their place.
+	// Pressing it again brings those tabs back. They are only remembered until the browser closes.
 	panic: () => {
 		const others = [...state.tabs];
+		const stash = state.stash;
 		closePanels();
 		closeFind();
 		hideSuggestions();
+		state.stash = null;
+		if (stash) {
+			const opened = stash.tabs.map(item => createTab({ url: item.url, isPrivate: item.isPrivate, isBackground: true }));
+			if (state.tabs.includes(stash.cover)) {
+				closeTab(stash.cover, true);
+				stash.cover.button.remove();
+			}
+			state.closed.length = 0;
+			activate(opened[Math.max(0, stash.tabs.findIndex(item => item.isActive))]);
+			followGlider(60);
+			return;
+		}
 		state.closed.length = 0;
-		createTab({ url: state.settings.panicUrl });
+		state.stash = { tabs: others.map(tab => ({ url: tab.url, isPrivate: tab.isPrivate, isActive: tab === state.active })), cover: null };
+		state.stash.cover = createTab({ url: state.settings.panicUrl });
 		for (const tab of others) {
 			closeTab(tab, true);
 			tab.button.remove();

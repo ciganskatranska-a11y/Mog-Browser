@@ -927,6 +927,37 @@ i.site-icon {
 	line-height: 1.4;
 }
 
+.site-summary {
+	flex: none;
+	padding-bottom: 8px;
+}
+
+.site-summary p {
+	margin: 0;
+	padding: 0 12px 6px;
+	font-size: 13px;
+	line-height: 1.45;
+}
+
+.site-points {
+	margin: 0;
+	padding: 0 12px 6px 28px;
+	color: var(--muted);
+	font-size: 13px;
+	line-height: 1.5;
+}
+
+.site-points li::marker {
+	color: var(--accent);
+}
+
+.site-summary .site-facts {
+	color: var(--accent);
+	font: 600 12px/1.4 var(--condensed);
+	letter-spacing: .08em;
+	text-transform: uppercase;
+}
+
 .site-picture {
 	display: block;
 	flex: none;
@@ -1310,6 +1341,25 @@ body.is-editing .widget-box:hover,
 .widget-box.is-moving {
 	outline-color: var(--accent);
 	outline-style: solid;
+}
+
+body.is-editing .widget-box.is-selected {
+	outline: 2px solid var(--accent);
+	box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.marquee {
+	position: fixed;
+	z-index: 4;
+	border: 1px solid var(--accent);
+	background: color-mix(in srgb, var(--accent) 12%, transparent);
+	pointer-events: none;
+}
+
+.chip.is-hot {
+	border-color: var(--hot);
+	background: var(--hot);
+	color: var(--on-hot);
 }
 
 .widget-box.is-moving {

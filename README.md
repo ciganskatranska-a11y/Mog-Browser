@@ -17,7 +17,7 @@ Download `MogBrowser-Setup.exe` from the latest [release](../../releases/latest)
 - **Website widgets:** type any site and get a card built from it, with its music player, latest posts, links, picture and search. You pick which parts to show.
 - **Browser size:** hold Ctrl and scroll on the home page to make the whole browser bigger or smaller.
 - **Dark mode:** sites that have a dark version show it automatically (switch in Settings).
-- **Emergency button:** the page icon next to Shields (Ctrl+Shift+X) closes every tab and opens a page you choose in Settings.
+- **Emergency button:** the page icon next to Shields (Ctrl+Shift+X) closes every tab and opens a page you choose in Settings. Press it again to bring the tabs back.
 - **Offline game:** a bonesmash clicker on the error page when a site cannot be reached.
 - **China mode 中文模式:** Baidu search, Chinese interface and site tiles, and a Chinese-language request header to every site.
 - **Lock In mode (Ctrl+Shift+L):** hides secondary controls and runs a 25-minute focus timer.

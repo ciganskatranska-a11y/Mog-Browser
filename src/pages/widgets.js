@@ -450,15 +450,16 @@ const widgetTypes = {
 
 	site: {
 		name: "Website",
-		hint: "A card for any site: its music, latest posts, links, picture and search.",
+		hint: "A card that sums up any site: what it's about, what's on it, its music, latest posts, links and search.",
 		w: 340,
-		h: 400,
+		h: 440,
 		minW: 220,
 		minH: 120,
 		options: [
 			{ key: "url", label: "Site address", type: "text", value: "", max: 500, placeholder: "slopalbum.com" },
 			{ key: "showHeader", label: "Name and icon", type: "toggle", value: true },
 			{ key: "showAbout", label: "Description", type: "toggle", value: true },
+			{ key: "showSummary", label: "Summary of the site", type: "toggle", value: true },
 			{ key: "showPicture", label: "Picture", type: "toggle", value: true },
 			{ key: "showPlayer", label: "Music player", type: "toggle", value: true },
 			{ key: "showPosts", label: "Latest posts", type: "toggle", value: true },
@@ -498,7 +499,7 @@ const widgetTypes = {
 			};
 
 			if (!address) return askForSite("Type a site and this card fills itself in with what the site has.");
-			if (!info || info.source !== address) {
+			if (!info || info.source !== address || (!info.error && info.version !== 2)) {
 				card.append(el("p", "empty is-loading", `Reading ${hostOf(/^https?:/i.test(address) ? address : `https://${address}`) || address}…`));
 				load();
 				return undefined;
@@ -519,6 +520,29 @@ const widgetTypes = {
 				card.append(head);
 			}
 			if (options.showAbout && info.description) card.append(el("p", "site-about", info.description));
+			if (options.showSummary) {
+				const facts = [
+					tracks.length ? `${tracks.length} ${tracks.length === 1 ? "song" : "songs"} to play` : "",
+					info.posts?.length ? `${info.posts.length} recent ${info.posts.length === 1 ? "post" : "posts"}` : "",
+					info.links?.length ? `${info.links.length} ${info.links.length === 1 ? "page" : "pages"} linked` : "",
+					info.search ? "has its own search" : "",
+				].filter(Boolean);
+				const isRepeat = options.showAbout && info.description && (info.summary ?? "").toLowerCase().startsWith(info.description.toLowerCase().slice(0, 60));
+				const points = Array.isArray(info.headings) ? info.headings.filter(text => text.toLowerCase() !== info.title.toLowerCase()).slice(0, 6) : [];
+				if (info.note) card.append(el("p", "site-about", info.note));
+				if ((info.summary && !isRepeat) || points.length || facts.length) {
+					const summary = el("div", "site-summary");
+					summary.append(el("h3", "", "Summary"));
+					if (info.summary && !isRepeat) summary.append(el("p", "", info.summary));
+					if (points.length) {
+						const list = el("ul", "site-points");
+						for (const point of points) list.append(el("li", "", point));
+						summary.append(list);
+					}
+					if (facts.length) summary.append(el("p", "site-facts", facts.join(" · ")));
+					card.append(summary);
+				}
+			}
 			if (options.showPicture && info.image && !hasPlayer) {
 				const link = el("a", "site-picture");
 				const picture = el("img");

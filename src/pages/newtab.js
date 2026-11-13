@@ -8,13 +8,15 @@ const home = {
 	boxes: new Map(),
 	cleanups: new Map(),
 	busy: new Set(),
+	selected: new Set(),
 	tickers: new Set(),
 	statViews: new Set(),
 	shownTotal: 0,
 	countFrame: 0,
 	saveTimer: 0,
 	zoomTimer: 0,
-	syncTimer: 0,
+	isSyncing: false,
+	needsSync: false,
 	isDefault: false,
 	layer: 1,
 	optionsFor: "",
@@ -332,46 +334,135 @@ function showGuides(x, y) {
 
 }
 
+// Shift+click adds a widget to the selection (or takes it out). Selected widgets move and get removed together.
+function select(ids) {
+
+	home.selected = new Set([...ids].filter(id => home.boxes.has(id)));
+	for (const [id, box] of home.boxes) box.classList.toggle("is-selected", home.selected.has(id));
+	const remove = element("editRemove");
+	remove.hidden = home.selected.size < 2;
+	remove.lastChild.textContent = `Remove ${home.selected.size}`;
+
+}
+
 function startMove(widget, box, event) {
 
 	if (!home.isEditing || event.button !== 0 || event.target.closest(".box-tools, .box-size")) return;
 	event.preventDefault();
 	closeOptions();
 
+	const wasSelected = home.selected.has(widget.id);
+	if (event.shiftKey) select([...home.selected, widget.id]);
+	else if (!wasSelected) select([]);
+
+	const group = (home.selected.has(widget.id) ? home.widgets.filter(item => home.selected.has(item.id)) : [widget]).map(item => {
+		const itemBox = home.boxes.get(item.id);
+		return { widget: item, box: itemBox, left: itemBox.offsetLeft, top: itemBox.offsetTop };
+	});
 	const start = { x: event.clientX, y: event.clientY, left: box.offsetLeft, top: box.offsetTop };
 	const width = box.offsetWidth;
 	const height = box.offsetHeight;
-	const others = home.widgets.filter(item => item !== widget).map(item => home.boxes.get(item.id)).map(other => ({ x: other.offsetLeft + other.offsetWidth / 2, y: other.offsetTop + other.offsetHeight / 2 }));
+	const others = home.widgets.filter(item => !group.some(member => member.widget === item)).map(item => home.boxes.get(item.id)).map(other => ({ x: other.offsetLeft + other.offsetWidth / 2, y: other.offsetTop + other.offsetHeight / 2 }));
 	const snap = (value, targets) => targets.find(target => Math.abs(target - value) < 7) ?? null;
+	// How far the whole group can travel before one of its widgets would leave the page.
+	const room = {
+		left: Math.min(0, edge - Math.min(...group.map(member => member.left))),
+		right: Math.max(0, innerWidth - edge - Math.max(...group.map(member => member.left + member.box.offsetWidth))),
+		up: Math.min(0, edge - Math.min(...group.map(member => member.top))),
+		down: Math.max(0, innerHeight - edge - Math.max(...group.map(member => member.top + member.box.offsetHeight))),
+	};
+	let hasMoved = false;
 
 	box.setPointerCapture(event.pointerId);
-	box.classList.add("is-moving");
-	box.style.zIndex = ++home.layer;
+	for (const member of group) {
+		member.box.classList.add("is-moving");
+		member.box.style.zIndex = ++home.layer;
+	}
 
 	const move = moveEvent => {
 		let left = start.left + moveEvent.clientX - start.x;
 		let top = start.top + moveEvent.clientY - start.y;
+		if (!hasMoved && Math.abs(left - start.left) < 3 && Math.abs(top - start.top) < 3) return;
+		hasMoved = true;
 		const lineX = moveEvent.altKey ? null : snap(left + width / 2, [innerWidth / 2, ...others.map(other => other.x)]);
 		const lineY = moveEvent.altKey ? null : snap(top + height / 2, [innerHeight / 2, ...others.map(other => other.y)]);
 		if (lineX !== null) left = lineX - width / 2;
 		if (lineY !== null) top = lineY - height / 2;
-		box.style.left = `${Math.round(clamp(left, edge, Math.max(edge, innerWidth - width - edge)))}px`;
-		box.style.top = `${Math.round(clamp(top, edge, Math.max(edge, innerHeight - height - edge)))}px`;
-		showGuides(lineX, lineY);
+		const shiftX = clamp(left - start.left, room.left, room.right);
+		const shiftY = clamp(top - start.top, room.up, room.down);
+		for (const member of group) {
+			member.box.style.left = `${Math.round(member.left + shiftX)}px`;
+			member.box.style.top = `${Math.round(member.top + shiftY)}px`;
+		}
+		showGuides(shiftX === left - start.left ? lineX : null, shiftY === top - start.top ? lineY : null);
 	};
 	const finish = () => {
 		box.removeEventListener("pointermove", move);
 		box.removeEventListener("pointerup", finish);
 		box.removeEventListener("pointercancel", finish);
-		box.classList.remove("is-moving");
+		for (const member of group) member.box.classList.remove("is-moving");
 		showGuides(null, null);
-		remember(widget);
-		home.widgets = [...home.widgets.filter(item => item !== widget), widget];
+		if (!hasMoved) {
+			if (event.shiftKey && wasSelected) select([...home.selected].filter(id => id !== widget.id));
+			else if (!event.shiftKey) select([]);
+			return;
+		}
+		for (const member of group) remember(member.widget);
+		home.widgets = [...home.widgets.filter(item => !group.some(member => member.widget === item)), ...group.map(member => member.widget)];
 		persist();
 	};
 	box.addEventListener("pointermove", move);
 	box.addEventListener("pointerup", finish);
 	box.addEventListener("pointercancel", finish);
+
+}
+
+// Dragging across the empty page draws a box and selects every widget it touches.
+function startMarquee(event) {
+
+	if (!home.isEditing || event.button !== 0 || event.target !== element("canvas")) return;
+	event.preventDefault();
+	closeOptions();
+
+	const canvas = element("canvas");
+	const frame = element("marquee");
+	const kept = event.shiftKey ? [...home.selected] : [];
+	const start = { x: event.clientX, y: event.clientY };
+	canvas.setPointerCapture(event.pointerId);
+	select(kept);
+
+	const move = moveEvent => {
+		const left = Math.min(start.x, moveEvent.clientX);
+		const top = Math.min(start.y, moveEvent.clientY);
+		const right = Math.max(start.x, moveEvent.clientX);
+		const bottom = Math.max(start.y, moveEvent.clientY);
+		frame.hidden = false;
+		frame.style.left = `${left}px`;
+		frame.style.top = `${top}px`;
+		frame.style.width = `${right - left}px`;
+		frame.style.height = `${bottom - top}px`;
+		const touched = [...home.boxes].filter(([, itemBox]) => {
+			const bounds = itemBox.getBoundingClientRect();
+			return bounds.left < right && bounds.right > left && bounds.top < bottom && bounds.bottom > top;
+		}).map(([id]) => id);
+		select([...kept, ...touched]);
+	};
+	const finish = () => {
+		canvas.removeEventListener("pointermove", move);
+		canvas.removeEventListener("pointerup", finish);
+		canvas.removeEventListener("pointercancel", finish);
+		frame.hidden = true;
+	};
+	canvas.addEventListener("pointermove", move);
+	canvas.addEventListener("pointerup", finish);
+	canvas.addEventListener("pointercancel", finish);
+
+}
+
+function removeSelected() {
+
+	for (const widget of home.widgets.filter(item => home.selected.has(item.id))) removeWidget(widget);
+	select([]);
 
 }
 
@@ -415,6 +506,7 @@ function removeWidget(widget) {
 	home.cleanups.get(widget.id)?.();
 	home.cleanups.delete(widget.id);
 	home.boxes.delete(widget.id);
+	home.selected.delete(widget.id);
 	home.widgets = home.widgets.filter(item => item !== widget);
 	box.classList.add("is-leaving");
 	setTimeout(() => box.remove(), 200);
@@ -580,6 +672,7 @@ function setEditing(isEditing) {
 	element("editLayout").setAttribute("aria-pressed", String(isEditing));
 	for (const box of home.boxes.values()) box.querySelector(".widget-body").inert = isEditing;
 	if (!isEditing) {
+		select([]);
 		closeOptions();
 		setPanel("gallery", false);
 		if (home.saveTimer) persist(true);
@@ -616,7 +709,7 @@ async function resetLayout() {
 async function sync() {
 
 	const data = await window.mogHome.data().catch(() => null);
-	if (!data) return;
+	if (!data || !home.data) return;
 	const hadSites = JSON.stringify([home.data.settings.home.sites, home.data.bookmarks]);
 	render(data, false);
 
@@ -658,6 +751,7 @@ async function sync() {
 	for (const widget of fresh) mount(widget);
 	for (const widget of home.widgets) home.boxes.get(widget.id).style.zIndex = ++home.layer;
 	for (const box of home.boxes.values()) box.querySelector(".widget-body").inert = home.isEditing;
+	select(home.selected);
 	renderGallery();
 
 }
@@ -728,9 +822,21 @@ function bindEvents() {
 	element("customEdit").addEventListener("click", () => setEditing(true));
 	element("resetSites").addEventListener("click", () => saveSites([]));
 
+	element("canvas").addEventListener("pointerdown", startMarquee);
+	element("editRemove").addEventListener("click", removeSelected);
 	document.addEventListener("keydown", event => {
-		if (event.key !== "Escape") return;
+		const isTyping = event.target.closest?.("input, textarea, select");
+		if (home.isEditing && home.selected.size && !isTyping && (event.key === "Delete" || event.key === "Backspace")) {
+			event.preventDefault();
+			return removeSelected();
+		}
+		if (home.isEditing && !isTyping && event.key.toLowerCase() === "a" && (event.ctrlKey || event.metaKey)) {
+			event.preventDefault();
+			return select(home.boxes.keys());
+		}
+		if (event.key !== "Escape") return undefined;
 		if (!element("options").hidden) return closeOptions();
+		if (home.selected.size) return select([]);
 		if (document.body.classList.contains("has-panel")) {
 			setPanel("customize", false);
 			return setPanel("gallery", false);
@@ -760,9 +866,16 @@ function bindEvents() {
 	addEventListener("pagehide", () => {
 		if (home.saveTimer) persist(true);
 	});
-	window.mogHome.onChange(() => {
-		clearTimeout(home.syncTimer);
-		home.syncTimer = setTimeout(sync, 120);
+	window.mogHome.onChange(async () => {
+		// No timer here: a home page in a background tab gets its timers slowed to a crawl, and it should still keep up.
+		home.needsSync = true;
+		if (home.isSyncing) return;
+		home.isSyncing = true;
+		while (home.needsSync) {
+			home.needsSync = false;
+			await sync().catch(() => {});
+		}
+		home.isSyncing = false;
 	});
 
 	element("backgroundFile").addEventListener("change", async event => {

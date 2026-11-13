@@ -44,7 +44,7 @@ const server = http.createServer((request, response) => {
 	if (request.url.startsWith("/tone.wav")) return response.writeHead(200, { "content-type": "audio/wav" }).end(makeTone());
 	if (request.url.startsWith("/ads.js")) return response.writeHead(200, { "content-type": "text/javascript" }).end("window.adLoaded = true;");
 	response.writeHead(200, { "content-type": "text/html", "content-security-policy": "default-src 'self'; script-src 'self' https://pagead2.googlesyndication.com" });
-	response.end("<title>Smoke page</title><audio id='tone' src='/tone.wav' loop autoplay controls></audio><script src='https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'></script>");
+	response.end("<title>Smoke page</title><h2>Mewing guide</h2><p>Mewing is the practice of resting the whole tongue on the roof of the mouth all day. People who keep mewing say the jawline looks sharper after many months of practice.</p><audio id='tone' src='/tone.wav' loop autoplay controls></audio><script src='https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'></script>");
 });
 
 app.whenReady().then(async () => {
@@ -114,15 +114,38 @@ app.whenReady().then(async () => {
 	await wait(2500);
 	const card = await homeContents.executeJavaScript("({ player: document.querySelectorAll('.site-card .player').length, name: document.querySelector('.site-names strong')?.textContent, track: document.querySelector('.player-title')?.textContent })", true);
 	check("home page: website widget builds a music player from the site", card.player === 1 && card.name === "Smoke page" && card.track === "tone", JSON.stringify(card));
+	const summary = await homeContents.executeJavaScript("({ text: document.querySelector('.site-summary p')?.textContent, point: document.querySelector('.site-points li')?.textContent, facts: document.querySelector('.site-facts')?.textContent })", true);
+	check("home page: website widget sums up what the site says", summary.text?.includes("Mewing is the practice") && summary.point === "Mewing guide" && summary.facts?.includes("1 song to play"), JSON.stringify(summary));
 	await homeContents.executeJavaScript("(() => { const card = home.widgets.find(item => item.type === 'site'); openOptions(card); document.querySelector('#options [data-option=showPlayer]').click(); })()", true);
 	await wait(300);
 	check("home page: widget settings choose what a widget shows", (await homeContents.executeJavaScript("document.querySelectorAll('.site-card .player').length", true)) === 0);
+
+	const grouped = await homeContents.executeJavaScript(`(async () => {
+		const pick = type => home.widgets.find(item => item.type === type);
+		const boxOf = type => home.boxes.get(pick(type).id);
+		const fire = (box, type, x, y, isShift) => box.dispatchEvent(new PointerEvent(type, { bubbles: true, button: 0, pointerId: 1, clientX: x, clientY: y, altKey: true, shiftKey: isShift }));
+		const click = (type, isShift) => { const box = boxOf(type); const b = box.getBoundingClientRect(); box.setPointerCapture = () => {}; fire(box, "pointerdown", b.left + 10, b.top + 10, isShift); fire(box, "pointerup", b.left + 10, b.top + 10, isShift); };
+		click("stats", true);
+		click("title", true);
+		const before = [boxOf("stats"), boxOf("title"), boxOf("search")].map(box => box.getBoundingClientRect());
+		const grab = boxOf("title");
+		fire(grab, "pointerdown", before[1].left + 10, before[1].top + 10, false);
+		fire(grab, "pointermove", before[1].left + 70, before[1].top + 50, false);
+		fire(grab, "pointerup", before[1].left + 70, before[1].top + 50, false);
+		const after = [boxOf("stats"), boxOf("title"), boxOf("search")].map(box => box.getBoundingClientRect());
+		const result = { count: home.selected.size, isButtonHidden: element("editRemove").hidden, moved: after.map((b, i) => [Math.round(b.left - before[i].left), Math.round(b.top - before[i].top)]) };
+		click("title", true);
+		result.afterToggle = home.selected.size;
+		select([]);
+		return result;
+	})()`, true);
+	check("home page: Shift selects several widgets and they move together", grouped.count === 2 && !grouped.isButtonHidden && grouped.afterToggle === 1 && JSON.stringify(grouped.moved) === "[[60,40],[60,40],[0,0]]", JSON.stringify(grouped));
 
 	await inUi("void createTab({ url: 'mog://newtab/', isBackground: true })");
 	await wait(1500);
 	const twin = webContents.fromId(await inUi("state.tabs.at(-1).id"));
 	await homeContents.executeJavaScript("addWidget('todo'); (() => { const clock = home.widgets.find(item => item.type === 'clock'); clock.options = { showSeconds: true }; fill(clock); persist(); })()", true);
-	await wait(1200);
+	await wait(1800);
 	const synced = await twin.executeJavaScript("({ todo: document.querySelectorAll('.widget-box.is-todo').length, digits: document.querySelector('.clock-time').children.length, same: JSON.stringify(home.widgets.map(item => item.id)) })", true);
 	const source = await homeContents.executeJavaScript("JSON.stringify(home.widgets.map(item => item.id))", true);
 	check("home page: other open home pages update when a widget is saved", synced.todo === 1 && synced.digits === 8 && synced.same === source, JSON.stringify(synced));
@@ -268,6 +291,10 @@ app.whenReady().then(async () => {
 	await wait(500);
 	const panic = await inUi("({ tabs: state.tabs.map(tab => tab.url), buttons: document.querySelectorAll('.tab').length, closed: state.closed.length })");
 	check("emergency button clears every tab", panic.tabs.length === 1 && panic.tabs[0] === "mog://newtab/#cover" && panic.buttons === 1 && panic.closed === 0, JSON.stringify(panic));
+	await inUi("element('reader').click()");
+	await wait(900);
+	const back = await inUi("({ tabs: state.tabs.map(tab => tab.url), buttons: document.querySelectorAll('.tab').length, active: state.active.url, stash: state.stash })");
+	check("pressing the emergency button again brings the tabs back", back.tabs.length >= 2 && back.tabs.includes("mog://settings/") && !back.tabs.includes("mog://newtab/#cover") && back.buttons === back.tabs.length && back.active === "mog://settings/" && back.stash === null, JSON.stringify(back));
 
 	await inUi("void createTab({ isPrivate: true })");
 	await wait(1500);
