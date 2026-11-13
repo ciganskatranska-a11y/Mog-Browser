@@ -24,6 +24,14 @@ jobs:
 
       - run: npm ci
 
+      # Create the release up front. Otherwise electron-builder's parallel uploads can each create
+      # their own release for the same tag, splitting the installer and latest.yml apart.
+      - name: Create release
+        shell: bash
+        run: gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "Mog Browser ${GITHUB_REF_NAME#v}" --notes "Download **MogBrowser-Setup.exe** below and run it. Installed copies update automatically."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and publish
         run: npm run release
         env:
