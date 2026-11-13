@@ -14,6 +14,10 @@ const home = {
 	data: null,
 	mode: "web",
 	search: { name: "Google", web: "https://www.google.com/search?q=%s", images: "https://www.google.com/search?q=%s&udm=2", videos: "https://www.google.com/search?q=%s&udm=7" },
+	shownTotal: 0,
+	countFrame: 0,
+	isEditing: false,
+	notesTimer: 0,
 };
 
 function el(tag, className, text) {
@@ -25,50 +29,147 @@ function el(tag, className, text) {
 
 }
 
-function renderSites() {
+function icon(name) {
 
-	const { bookmarks, settings } = home.data;
-	const seen = new Set();
-	const sites = [];
-	const add = (title, url, isBuiltIn) => {
-		const host = new URL(url).hostname.replace(/^www\./, "");
-		if (seen.has(host) || sites.length >= 12) return;
-		seen.add(host);
-		sites.push({ title, url, host, isBuiltIn });
-	};
-	for (const item of bookmarks) add(item.title, item.url, item.isBuiltIn);
-	for (const [title, host] of settings.chinaMode ? chinaSites : popularSites) add(title, `https://${host}/`, false);
-
-	element("sites").hidden = !settings.home.showSites;
-	element("sites").replaceChildren(...sites.map(site => {
-		const link = el("a", site.isBuiltIn ? "is-built-in" : "");
-		const icon = el("img");
-		link.href = site.url;
-		link.title = site.host;
-		icon.alt = "";
-		icon.src = `https://${site.host}/favicon.ico`;
-		const fallback = () => icon.isConnected && icon.replaceWith(el("i", "", [...site.title][0].toUpperCase()));
-		icon.addEventListener("error", fallback, { once: true });
-		icon.addEventListener("load", () => {
-			if (icon.naturalWidth < 8) fallback();
-		}, { once: true });
-		setTimeout(() => {
-			if (!icon.complete || !icon.naturalWidth) fallback();
-		}, 2500);
-		link.append(icon, el("span", "", site.title));
-		return link;
-	}));
+	const holder = document.createElement("div");
+	holder.innerHTML = `<svg><use href="#i-${name}"/></svg>`;
+	return holder.firstChild;
 
 }
 
-function renderStats() {
+function hostOf(url) {
 
-	const total = home.data.blockedTotal;
-	const current = tiers.findLast(([minimum]) => total >= minimum);
-	const next = tiers.find(([minimum]) => total < minimum);
-	element("blocked").textContent = total.toLocaleString();
-	element("tier").textContent = current[1];
+	try {
+		return new URL(url).hostname.replace(/^www\./, "");
+	} catch {
+		return "";
+	}
+
+}
+
+function currentSites() {
+
+	const { bookmarks, settings } = home.data;
+	if (settings.home.sites.length) return settings.home.sites.map(site => ({ title: site.title, url: site.url }));
+
+	const seen = new Set();
+	const sites = [];
+	const add = (title, url) => {
+		const host = hostOf(url);
+		if (seen.has(host) || sites.length >= 12) return;
+		seen.add(host);
+		sites.push({ title, url });
+	};
+	for (const item of bookmarks) add(item.title, item.url);
+	for (const [title, host] of settings.chinaMode ? chinaSites : popularSites) add(title, `https://${host}/`);
+	return sites;
+
+}
+
+function saveSites(sites) {
+	return save({ home: { sites } });
+}
+
+function renderSites() {
+
+	const { settings } = home.data;
+	const sites = currentSites();
+	const section = element("sitesSection");
+	section.hidden = !settings.home.showSites;
+	section.classList.toggle("is-editing", home.isEditing);
+	element("editSites").lastElementChild.textContent = t(home.isEditing ? "done" : "editSites");
+
+	const tiles = sites.map((site, index) => {
+		const link = el("a", "tile");
+		const image = el("img");
+		const remove = el("button", "tile-remove");
+		const host = hostOf(site.url);
+		const fallback = () => image.isConnected && image.replaceWith(el("i", "", [...site.title][0].toUpperCase()));
+
+		link.href = site.url;
+		link.title = host;
+		link.style.setProperty("--i", index);
+		image.alt = "";
+		image.src = `https://${host}/favicon.ico`;
+		image.addEventListener("error", fallback, { once: true });
+		image.addEventListener("load", () => {
+			if (image.naturalWidth < 8) fallback();
+		}, { once: true });
+		setTimeout(() => {
+			if (!image.complete || !image.naturalWidth) fallback();
+		}, 2500);
+
+		remove.type = "button";
+		remove.setAttribute("aria-label", `${t("remove")} ${site.title}`);
+		remove.append(icon("close"));
+		remove.addEventListener("click", event => {
+			event.preventDefault();
+			event.stopPropagation();
+			link.classList.add("is-leaving");
+			setTimeout(() => saveSites(sites.filter((item, position) => position !== index)), 200);
+		});
+		link.addEventListener("click", event => {
+			if (home.isEditing) event.preventDefault();
+		});
+		link.append(image, el("span", "", site.title), remove);
+		return link;
+	});
+
+	if (sites.length < 24) {
+		const add = el("button", "tile is-add");
+		add.type = "button";
+		add.style.setProperty("--i", sites.length);
+		add.append(icon("plus"), el("span", "", t("addSite")));
+		add.addEventListener("click", () => setAdding(true));
+		tiles.push(add);
+	}
+	element("sites").replaceChildren(...tiles);
+
+}
+
+function setAdding(isOpen) {
+
+	const form = element("addSite");
+	form.classList.toggle("is-open", isOpen);
+	form.inert = !isOpen;
+	if (isOpen) element("siteName").focus();
+	else form.reset();
+
+}
+
+function renderTier(total) {
+
+	const index = tiers.findLastIndex(([minimum]) => total >= minimum);
+	const [floor, name] = tiers[index];
+	const next = tiers[index + 1];
+	element("tier").textContent = name;
 	element("tierNext").textContent = next ? `${t("rating")} · ${(next[0] - total).toLocaleString()} → ${next[1]}` : t("rating");
+	element("tierBar").style.transform = `scaleX(${next ? (total - floor) / (next[0] - floor) : 1})`;
+
+}
+
+// Counts up to the live total instead of jumping.
+function showTotal(total) {
+
+	renderTier(total);
+	if (total === home.shownTotal) return;
+	const blocked = element("blocked");
+	const from = home.shownTotal;
+	const started = performance.now();
+	const duration = Math.min(900, 200 + Math.abs(total - from) * 30);
+	cancelAnimationFrame(home.countFrame);
+	blocked.classList.remove("is-bumped");
+	void blocked.offsetWidth;
+	blocked.classList.add("is-bumped");
+
+	const step = now => {
+		const progress = Math.min(1, (now - started) / duration);
+		const value = Math.round(from + (total - from) * (1 - (1 - progress) ** 3));
+		home.shownTotal = value;
+		blocked.textContent = value.toLocaleString();
+		if (progress < 1) home.countFrame = requestAnimationFrame(step);
+	};
+	home.countFrame = requestAnimationFrame(step);
 
 }
 
@@ -81,10 +182,7 @@ function renderClock() {
 	if (clock.dataset.value !== time) {
 		const previous = clock.dataset.value ?? "";
 		clock.dataset.value = time;
-		clock.replaceChildren(...[...time].map((character, index) => {
-			const digit = el("span", previous && previous[index] !== character ? "digit is-rolling" : "digit", character);
-			return digit;
-		}));
+		clock.replaceChildren(...[...time].map((character, index) => el("span", previous && previous[index] !== character ? "digit is-rolling" : "digit", character)));
 	}
 	element("date").textContent = now.toLocaleDateString(locale, { weekday: "long", month: "long", day: "numeric" });
 
@@ -108,7 +206,7 @@ function render(data, isFirst) {
 	const custom = settings.home;
 	const backdrop = element("backdrop");
 
-	applyMogTheme(settings.theme);
+	applyMogTheme(settings.theme, settings.flag);
 	applyMogLanguage(settings.chinaMode);
 	home.search = data.search;
 	if (isFirst) home.mode = settings.searchMode;
@@ -118,22 +216,27 @@ function render(data, isFirst) {
 	element("homeTagline").hidden = !custom.tagline;
 	element("stats").hidden = !custom.showStats;
 	element("clock").hidden = !custom.showClock;
+	element("notes").hidden = !custom.showNotes;
+	if (document.activeElement !== element("notesText")) element("notesText").value = custom.notes;
 	backdrop.classList.toggle("has-image", Boolean(custom.background));
 	backdrop.style.setProperty("--image", custom.background ? `url("mog://newtab/background?${encodeURIComponent(custom.background)}")` : "none");
 	backdrop.style.setProperty("--dim", custom.dim / 100);
 
 	element("dim").value = custom.dim;
 	element("removeBackground").hidden = !custom.background;
+	element("resetSites").hidden = !custom.sites.length;
 	element("chinaMode").checked = settings.chinaMode;
 	for (const input of document.querySelectorAll("[data-home]")) input.checked = custom[input.dataset.home];
-	element("themes").replaceChildren(...themePresets.map(preset => {
-		const swatch = themeSwatch(preset, () => save({ theme: preset.theme }));
-		swatch.setAttribute("aria-pressed", String(isThemeActive(preset, settings.theme)));
-		return swatch;
-	}));
+	for (const [id, list] of [["themes", themePresets], ["countries", countryThemes]]) {
+		element(id).replaceChildren(...list.map(preset => {
+			const swatch = themeSwatch(preset, () => save(themePatch(preset)));
+			swatch.setAttribute("aria-pressed", String(isThemeActive(preset, settings.theme, settings.flag)));
+			return swatch;
+		}));
+	}
 
 	renderSites();
-	renderStats();
+	showTotal(data.blockedTotal);
 	renderClock();
 	renderModes();
 
@@ -143,6 +246,14 @@ async function save(patch) {
 
 	const next = await window.mogHome.set(patch);
 	if (next) render(next, false);
+
+}
+
+function setCustomizing(isOpen) {
+
+	element("customize").classList.toggle("is-open", isOpen);
+	element("customize").inert = !isOpen;
+	document.body.classList.toggle("is-customizing", isOpen);
 
 }
 
@@ -163,24 +274,44 @@ function bindEvents() {
 
 	element("search").addEventListener("submit", event => {
 		event.preventDefault();
-		const text = element("search").elements.q.value.trim();
-		element("search").classList.remove("is-firing");
-		void element("search").offsetWidth;
-		element("search").classList.add("is-firing");
+		const form = element("search");
+		const text = form.elements.q.value.trim();
+		form.classList.remove("is-firing");
+		void form.offsetWidth;
+		form.classList.add("is-firing");
 		if (text) location.href = home.search[home.mode].replace("%s", encodeURIComponent(text));
 	});
 
-	const setCustomizing = isOpen => {
-		element("customize").classList.toggle("is-open", isOpen);
-		element("customize").inert = !isOpen;
-		document.body.classList.toggle("is-customizing", isOpen);
-	};
-	element("customize").hidden = false;
-	setCustomizing(false);
 	element("openCustomize").addEventListener("click", () => setCustomizing(!element("customize").classList.contains("is-open")));
 	element("closeCustomize").addEventListener("click", () => setCustomizing(false));
+	element("scrim").addEventListener("click", () => setCustomizing(false));
 	document.addEventListener("keydown", event => {
-		if (event.key === "Escape") setCustomizing(false);
+		if (event.key !== "Escape") return;
+		setCustomizing(false);
+		setAdding(false);
+	});
+
+	element("editSites").addEventListener("click", () => {
+		home.isEditing = !home.isEditing;
+		if (!home.isEditing) setAdding(false);
+		renderSites();
+	});
+	element("cancelSite").addEventListener("click", () => setAdding(false));
+	element("addSite").addEventListener("submit", event => {
+		event.preventDefault();
+		const title = element("siteName").value.trim();
+		let url = element("siteUrl").value.trim();
+		if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+		if (!title || !hostOf(url).includes(".")) return element("siteUrl").focus();
+		setAdding(false);
+		saveSites([...currentSites(), { title, url }]);
+	});
+	element("resetSites").addEventListener("click", () => saveSites([]));
+
+	element("notesText").addEventListener("input", event => {
+		clearTimeout(home.notesTimer);
+		const notes = event.target.value;
+		home.notesTimer = setTimeout(() => window.mogHome.set({ home: { notes } }), 400);
 	});
 
 	element("backgroundFile").addEventListener("change", async event => {
@@ -210,6 +341,11 @@ async function init() {
 	if (!data) return;
 	render(data, true);
 	setInterval(renderClock, 1000);
+	setInterval(async () => {
+		if (document.hidden) return;
+		const stats = await window.mogHome.stats().catch(() => null);
+		if (stats) showTotal(stats.blockedTotal);
+	}, 1500);
 
 }
 

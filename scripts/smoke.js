@@ -62,6 +62,8 @@ app.whenReady().then(async () => {
 		await wait(200);
 		ui = BrowserWindow.getAllWindows().find(item => item.isVisible());
 	}
+	ui.unmaximize();
+	ui.setSize(1360, 860);
 	ui.setFocusable(false);
 	ui.setIgnoreMouseEvents(true);
 	ui.setPosition(-4000, -4000);
@@ -74,8 +76,21 @@ app.whenReady().then(async () => {
 	const home = await inUi("({ count: state.tabs.length, url: state.active.url, id: state.active.id, title: state.active.title, bookmarks: state.bookmarks.map(item => item.title) })");
 	check("home tab opens", home.count === 1 && home.url === "mog://newtab/" && home.id > 0, JSON.stringify(home));
 	check("built-in sites are in the bookmarks bar", home.bookmarks.includes("SlopAlbum") && home.bookmarks.includes("Looksmax.org"));
-	const homePage = await webContents.fromId(home.id).executeJavaScript("({ sites: [...document.querySelectorAll('#sites a span')].map(node => node.textContent), dock: document.querySelectorAll('.dock a, .dock button').length, clock: document.getElementById('time').children.length, font: document.fonts.check('800 20px \"Barlow Condensed\"') })", true);
-	check("home page renders", homePage.sites.length === 12 && homePage.sites.includes("YouTube") && homePage.sites.includes("Looksmax.org") && homePage.dock === 5 && homePage.clock === 5 && homePage.font, JSON.stringify(homePage));
+	const homePage = await webContents.fromId(home.id).executeJavaScript("({ sites: [...document.querySelectorAll('#sites a.tile span')].map(node => node.textContent), add: document.querySelectorAll('#sites .is-add').length, gradient: getComputedStyle(document.querySelector('.backdrop i')).backgroundImage.includes('radial-gradient'), dock: document.querySelectorAll('.dock a, .dock button').length, clock: document.getElementById('time').children.length, font: document.fonts.check('800 20px \"Barlow Condensed\"') })", true);
+	check("home page renders", homePage.sites.length === 12 && homePage.sites.includes("YouTube") && homePage.sites.includes("Looksmax.org") && homePage.dock === 5 && homePage.clock === 5 && homePage.font && homePage.add === 1 && homePage.gradient, JSON.stringify(homePage));
+
+	const homeContents = webContents.fromId(home.id);
+	await homeContents.executeJavaScript("document.getElementById('editSites').click(); document.querySelector('.is-add').click(); document.getElementById('siteName').value = 'Kick clips'; document.getElementById('siteUrl').value = 'kick.com/clips'; document.getElementById('addSite').requestSubmit()", true);
+	await wait(700);
+	const tiles = await homeContents.executeJavaScript("[...document.querySelectorAll('#sites a.tile span')].map(node => node.textContent)", true);
+	check("home page: add your own site tile", tiles.length === 13 && tiles.at(-1) === "Kick clips", JSON.stringify(tiles.slice(-3)));
+	await homeContents.executeJavaScript("document.querySelector('[data-home=showNotes]').click()", true);
+	await wait(500);
+	await homeContents.executeJavaScript("const n = document.getElementById('notesText'); n.value = 'mog harder'; n.dispatchEvent(new Event('input'))", true);
+	await wait(800);
+	const widget = await homeContents.executeJavaScript("window.mogHome.data().then(data => ({ notes: data.settings.home.notes, shown: !document.getElementById('notes').hidden }))", true);
+	check("home page: notes widget saves", widget.notes === "mog harder" && widget.shown, JSON.stringify(widget));
+	await homeContents.executeJavaScript("window.mogHome.set({ home: { sites: [], showNotes: false, notes: '' } })", true);
 
 	const square = await inUi("[...document.querySelectorAll('.tab, .address, .pill, .panel, .icon')].every(node => getComputedStyle(node).borderRadius === '0px')");
 	check("browser chrome has no rounded corners", square);
@@ -101,8 +116,13 @@ app.whenReady().then(async () => {
 	const glide = await inUi("({ tabs: state.tabs.length, glider: Math.round(element('tabGlider').getBoundingClientRect().left), active: Math.round(state.active.button.getBoundingClientRect().left) })");
 	check("tab highlight glides to the new tab", glide.tabs === 2 && Math.abs(glide.glider - glide.active) <= 1, JSON.stringify(glide));
 	await inUi("closeTab(state.active)");
-	await wait(400);
-	check("closed tab animates out and is removed", (await inUi("document.querySelectorAll('.tab').length")) === 1);
+	await wait(120);
+	const smash = await inUi("({ hammer: document.querySelectorAll('.hammer').length, smashed: document.querySelectorAll('.tab.is-smashed').length })");
+	check("closing a tab swings the hammer", smash.hammer === 1 && smash.smashed === 1, JSON.stringify(smash));
+	await wait(700);
+	check("closed tab is removed after the smash", (await inUi("document.querySelectorAll('.tab').length + document.querySelectorAll('.hammer').length")) === 1);
+	const wide = await inUi("Math.round(state.active.button.getBoundingClientRect().width)");
+	check("a single tab scales up", wide >= 240, String(wide));
 
 	await inUi("runAction('lock-in')");
 	await wait(500);
@@ -166,6 +186,15 @@ app.whenReady().then(async () => {
 	const boosterPrefs = await inWorker("chrome.storage.local.get('prefs').then(data => data.prefs?.accent)");
 	check("theme preset recolors the browser and the booster", themed.accent === "#d9b44a" && boosterPrefs === "#d9b44a", JSON.stringify({ themed, boosterPrefs }));
 	await shoot("mog-settings.png");
+	await settingsPage.executeJavaScript("document.querySelector('#countries .card').click()", true);
+	await wait(800);
+	const flag = await inUi("({ flag: state.settings.flag, stripe: getComputedStyle(document.documentElement).getPropertyValue('--flag').includes('linear-gradient'), accent: state.settings.theme.accent })");
+	check("country theme applies with its flag stripe", flag.flag === "sk" && flag.stripe && flag.accent === "#ffffff", JSON.stringify(flag));
+	const nav = await settingsPage.executeJavaScript("location.hash = '#history'; new Promise(resolve => setTimeout(() => resolve({ active: document.querySelector('.page.is-active').id, glider: document.getElementById('navGlider').style.transform }), 400))", true);
+	check("settings pages switch with the sliding marker", nav.active === "page-history" && /translateY\((?!0px)/.test(nav.glider), JSON.stringify(nav));
+	await shoot("mog-settings-2.png");
+	await settingsPage.executeJavaScript("document.querySelector('#presets .card').click()", true);
+	await wait(500);
 	check("history records visited pages", await settingsPage.executeJavaScript("window.mogSettings.get().then(data => data.history.length > 0)", true));
 
 	await inUi("window.mog.invoke('ui:settings', { chinaMode: true }).then(applyState)");
@@ -177,6 +206,23 @@ app.whenReady().then(async () => {
 	await shoot("mog-china.png");
 	await inUi("window.mog.invoke('ui:settings', { chinaMode: false }).then(applyState)");
 	await wait(300);
+
+	await inUi("void createTab({ url: 'http://127.0.0.1:9/' })");
+	await wait(2500);
+	const offline = await inUi("({ game: document.querySelectorAll('.failure .smash').length, title: document.querySelector('.failure h1')?.textContent })");
+	await inUi("document.querySelector('.smash-target').click(); document.querySelector('.smash-target').click()");
+	const score = await inUi("Number(document.querySelector('.smash-score').textContent)");
+	check("offline page has the bonesmash clicker", offline.game === 1 && score >= 2, JSON.stringify({ offline, score }));
+	await shoot("mog-offline.png");
+	await inUi("closeTab(state.active)");
+	await wait(700);
+
+	await inUi("void createTab({ url: 'mog://newtab/' }); void createTab({ url: 'mog://settings/' })");
+	await wait(600);
+	await inUi("state.settings.panicUrl = 'mog://newtab/#cover'; element('reader').click()");
+	await wait(500);
+	const panic = await inUi("({ tabs: state.tabs.map(tab => tab.url), buttons: document.querySelectorAll('.tab').length, closed: state.closed.length })");
+	check("emergency button clears every tab", panic.tabs.length === 1 && panic.tabs[0] === "mog://newtab/#cover" && panic.buttons === 1 && panic.closed === 0, JSON.stringify(panic));
 
 	await inUi("void createTab({ isPrivate: true })");
 	await wait(1500);

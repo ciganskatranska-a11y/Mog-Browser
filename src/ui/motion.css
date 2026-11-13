@@ -600,3 +600,423 @@ body.is-locked-in .brand {
 		animation: none !important;
 	}
 }
+
+/* ---------- Round 3: tab sizing, merged active tab, flag stripe, hammer, update chip, offline game ---------- */
+
+#chrome {
+	background:
+		linear-gradient(90deg, color-mix(in srgb, var(--glow-a, var(--accent)) 9%, transparent), transparent 38%, color-mix(in srgb, var(--glow-b, var(--hot)) 9%, transparent)),
+		var(--bg);
+}
+
+.strip {
+	background: none;
+}
+
+.toolbar,
+.bookmarks {
+	background: var(--panel);
+}
+
+.tab-row {
+	flex: 0 1 auto;
+}
+
+.tab {
+	flex: 0 1 auto;
+	width: 260px;
+	max-width: 260px;
+}
+
+.tab-glider {
+	inset: 0 auto -1px 0;
+	background: linear-gradient(180deg, color-mix(in srgb, var(--ambient) 14%, var(--panel)), var(--panel) 70%);
+	box-shadow: none;
+}
+
+.tab-glider.is-private {
+	background: linear-gradient(180deg, color-mix(in srgb, var(--hot) 26%, var(--panel)), var(--panel) 70%);
+	box-shadow: none;
+}
+
+.tab-close {
+	opacity: .45;
+}
+
+.tab:hover .tab-close,
+.tab[aria-selected="true"] .tab-close {
+	opacity: 1;
+}
+
+.brand {
+	transform-origin: 50% 50%;
+}
+
+html.has-flag #chrome::before {
+	content: "";
+	position: absolute;
+	inset: auto 0 -3px;
+	z-index: 2;
+	height: 3px;
+	background: var(--flag);
+	pointer-events: none;
+}
+
+html.has-flag .progress {
+	bottom: -5px;
+}
+
+.swatches {
+	grid-template-columns: repeat(8, 1fr);
+}
+
+.swatch.is-flag {
+	aspect-ratio: 3 / 2;
+}
+
+/* Tab close: the hammer swings, the tab is flattened, the gap closes */
+
+.hammer {
+	position: fixed;
+	top: 0;
+	z-index: 8;
+	width: 0;
+	height: 0;
+	pointer-events: none;
+}
+
+.hammer svg {
+	position: absolute;
+	top: 2px;
+	left: -4px;
+	width: 34px;
+	height: 34px;
+	fill: var(--accent);
+	stroke: var(--bg);
+	stroke-width: 1;
+	transform-origin: 40% 95%;
+	animation: hammer-swing 460ms cubic-bezier(.3, 0, .2, 1) forwards;
+}
+
+.hammer span {
+	position: absolute;
+	top: 12px;
+	left: 0;
+	color: var(--hot);
+	font: 800 13px/1 "Barlow Condensed", sans-serif;
+	letter-spacing: .12em;
+	white-space: nowrap;
+	translate: -50% 0;
+	opacity: 0;
+	animation: mogged 460ms 170ms cubic-bezier(.16, 1, .3, 1) forwards;
+}
+
+@keyframes hammer-swing {
+	0% {
+		opacity: 0;
+		transform: rotate(70deg) translateY(-14px);
+	}
+	18% {
+		opacity: 1;
+	}
+	40% {
+		transform: rotate(-28deg);
+	}
+	52% {
+		transform: rotate(-14deg);
+	}
+	70% {
+		opacity: 1;
+		transform: rotate(-20deg);
+	}
+	100% {
+		opacity: 0;
+		transform: rotate(20deg) translateY(-10px);
+	}
+}
+
+@keyframes mogged {
+	0% {
+		opacity: 0;
+		transform: translateY(6px) scale(.7);
+	}
+	30% {
+		opacity: 1;
+		transform: translateY(18px) scale(1.15);
+	}
+	100% {
+		opacity: 0;
+		transform: translateY(30px) scale(1);
+	}
+}
+
+.tab.is-smashed {
+	transform-origin: 50% 100%;
+	animation: smashed 470ms cubic-bezier(.3, 0, .2, 1) forwards;
+	pointer-events: none;
+}
+
+@keyframes smashed {
+	0%,
+	36% {
+		transform: none;
+		filter: none;
+	}
+	42% {
+		transform: scaleY(.18) translateX(-3px);
+		filter: brightness(2.4);
+	}
+	50% {
+		transform: scaleY(.24) translateX(3px);
+	}
+	58% {
+		transform: scaleY(.14) translateX(-2px);
+		opacity: 1;
+	}
+	100% {
+		transform: scaleY(.04);
+		opacity: 0;
+	}
+}
+
+/* Updater chip */
+
+.update {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	flex: none;
+	max-width: 0;
+	height: var(--bar);
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 0 solid var(--ambient);
+	background: none;
+	color: var(--ambient);
+	font: 600 14px/1 "Barlow Condensed", sans-serif;
+	letter-spacing: .05em;
+	text-transform: uppercase;
+	white-space: nowrap;
+	opacity: 0;
+	transform: translateY(6px);
+	transition: max-width var(--slow) var(--out), padding var(--slow) var(--out), margin var(--slow) var(--out), opacity var(--medium) var(--out), transform 260ms var(--spring), background var(--medium) var(--out), color var(--medium) var(--out), border-width 0s var(--slow);
+}
+
+.update.is-open {
+	max-width: 220px;
+	margin-right: 4px;
+	padding: 0 10px;
+	border-width: 1px;
+	opacity: 1;
+	transform: none;
+	transition: max-width var(--slow) var(--out), padding var(--slow) var(--out), margin var(--slow) var(--out), opacity var(--medium) var(--out), transform 260ms var(--spring), background var(--medium) var(--out), color var(--medium) var(--out), border-width 0s;
+}
+
+.update.is-ready {
+	background: var(--ambient);
+	color: var(--on-accent);
+	cursor: pointer;
+}
+
+.update.is-ready:hover {
+	transform: translateY(-1px);
+}
+
+.update.is-ready:active {
+	transform: scale(.94);
+}
+
+.update i {
+	position: absolute;
+	inset: auto 0 0;
+	height: 2px;
+	background: var(--ambient);
+	transform: scaleX(0);
+	transform-origin: left;
+	transition: transform 400ms linear;
+}
+
+.update.is-ready i {
+	opacity: 0;
+}
+
+.update.is-ready svg {
+	animation: nudge 1.6s var(--out) infinite;
+}
+
+@keyframes nudge {
+	50% {
+		transform: translateY(-2px);
+	}
+}
+
+/* Offline bonesmash clicker */
+
+.failure {
+	overflow-y: auto;
+	justify-content: safe center;
+	padding: 24px 16px;
+	background:
+		radial-gradient(60% 50% at 50% 0%, color-mix(in srgb, var(--hot) 16%, transparent), transparent 70%),
+		var(--bg);
+}
+
+.smash {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 10px;
+	width: min(420px, 100%);
+	margin-top: 22px;
+	padding: 18px;
+	border: 1px solid var(--line);
+	background: var(--panel);
+}
+
+.smash-title {
+	color: var(--muted) !important;
+	font: 600 13px/1 "Barlow Condensed", sans-serif !important;
+	letter-spacing: .14em;
+	text-transform: uppercase;
+}
+
+.smash-count {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+}
+
+.smash-score {
+	color: var(--accent);
+	font: 800 56px/.9 "Barlow Condensed", sans-serif;
+	font-variant-numeric: tabular-nums;
+}
+
+.failure .smash-target {
+	position: relative;
+	width: 220px;
+	height: 130px;
+	margin: 0;
+	padding: 0;
+	border: 1px solid var(--line);
+	background: var(--bg);
+	color: var(--text);
+	cursor: pointer;
+	overflow: hidden;
+	transition: border-color var(--quick) var(--out), transform 200ms var(--spring);
+}
+
+.failure .smash-target:hover {
+	border-color: var(--accent);
+}
+
+.failure .smash-target:active {
+	transform: scale(.97);
+}
+
+.smash-bone {
+	position: absolute;
+	left: 50%;
+	bottom: 22px;
+	width: 130px;
+	height: 65px;
+	fill: var(--accent);
+	stroke: none;
+	translate: -50% 0;
+}
+
+.smash-target[data-stage="1"] .smash-bone {
+	fill: color-mix(in srgb, var(--accent) 85%, var(--hot));
+}
+
+.smash-target[data-stage="2"] .smash-bone {
+	fill: color-mix(in srgb, var(--accent) 65%, var(--hot));
+}
+
+.smash-target[data-stage="3"] .smash-bone {
+	fill: color-mix(in srgb, var(--accent) 40%, var(--hot));
+}
+
+.smash-target.is-hit .smash-bone {
+	animation: bone-hit 220ms var(--out);
+}
+
+.smash-hammer {
+	position: absolute;
+	top: 6px;
+	left: 54%;
+	width: 62px;
+	height: 62px;
+	fill: var(--text);
+	stroke: var(--bg);
+	stroke-width: 1;
+	transform: rotate(40deg);
+	transform-origin: 40% 95%;
+}
+
+.smash-target.is-hit .smash-hammer {
+	animation: game-swing 220ms var(--out);
+}
+
+@keyframes game-swing {
+	35% {
+		transform: rotate(-38deg);
+	}
+}
+
+@keyframes bone-hit {
+	35% {
+		transform: scaleY(.72) translateY(8px);
+		filter: brightness(1.6);
+	}
+}
+
+.smash-pop {
+	position: absolute;
+	color: var(--hot);
+	font: 800 20px/1 "Barlow Condensed", sans-serif;
+	pointer-events: none;
+	animation: pop-up 620ms var(--out) forwards;
+}
+
+@keyframes pop-up {
+	to {
+		opacity: 0;
+		transform: translateY(-46px);
+	}
+}
+
+.smash-shop {
+	display: grid;
+	gap: 6px;
+	width: 100%;
+}
+
+.failure .smash-buy {
+	margin: 0;
+	padding: 8px 10px;
+	border: 1px solid var(--line);
+	background: none;
+	color: var(--text);
+	font: 600 13px/1.2 "Barlow", sans-serif;
+	letter-spacing: 0;
+	text-align: left;
+	text-transform: none;
+	transition: border-color var(--quick) var(--out), background var(--quick) var(--out), opacity var(--quick) var(--out), transform 200ms var(--spring);
+}
+
+.failure .smash-buy:hover:not(:disabled) {
+	border-color: var(--accent);
+	background: var(--raised);
+}
+
+.failure .smash-buy:disabled {
+	opacity: .4;
+	cursor: not-allowed;
+}
+
+.smash-best {
+	font-size: 12px !important;
+}

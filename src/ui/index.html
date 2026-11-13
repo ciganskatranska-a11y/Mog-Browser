@@ -19,6 +19,10 @@
 		<symbol id="i-menu" viewBox="0 0 16 16"><path d="M2.5 4.5h11M2.5 8h11m-11 3.5h11"/></symbol>
 		<symbol id="i-check" viewBox="0 0 16 16"><path d="m3 8.5 3.2 3L13 4.5"/></symbol>
 		<symbol id="i-lock" viewBox="0 0 16 16"><path d="M2.5 2.5h4M2.5 2.5v4M13.5 2.5h-4M13.5 2.5v4M2.5 13.5h4M2.5 13.5v-4M13.5 13.5h-4M13.5 13.5v-4M6.5 6.5h3v3h-3z"/></symbol>
+		<symbol id="i-hammer" viewBox="0 0 32 32"><path d="M5 5h17v9H5zM22 7h5v5h-5zM12 14h4v14h-4z"/></symbol>
+		<symbol id="i-bone" viewBox="0 0 48 24"><path d="M9 13a4.5 4.5 0 1 1 6-4h18a4.5 4.5 0 1 1 6 4 4.5 4.5 0 1 1-6 4H15a4.5 4.5 0 1 1-6-4z"/></symbol>
+		<symbol id="i-up" viewBox="0 0 16 16"><path d="M8 13V3M3.5 7.5 8 3l4.500 4.500"/></symbol>
+		<symbol id="i-page" viewBox="0 0 16 16"><path d="M3.5 2.5h9v11h-9zM5.5 5.5h5M5.5 8h5M5.5 10.500h3"/></symbol>
 		<symbol id="i-shield" viewBox="0 0 16 16"><path d="M8 2 3 4v4c0 3 2.2 5 5 6 2.8-1 5-3 5-6V4z"/></symbol>
 	</svg>
 
@@ -45,8 +49,10 @@
 				<ul id="suggestions" class="suggestions" role="listbox"></ul>
 			</form>
 
+			<button id="update" class="update" type="button"><svg><use href="#i-up"/></svg><span id="updateText"></span><i id="updateBar"></i></button>
 			<button id="download" class="download" type="button" aria-live="polite"><svg><use href="#i-check"/></svg><span id="downloadName"></span><i id="downloadBar"></i></button>
 			<button id="lockIn" class="pill lock" type="button" title="Lock In mode (Ctrl+Shift+L)" aria-pressed="false"><svg><use href="#i-lock"/></svg><span id="lockTimer" class="lock-timer">25:00</span></button>
+			<button id="reader" class="icon" type="button" title="Reader" aria-label="Reader"><svg><use href="#i-page"/></svg></button>
 			<button id="shields" class="pill" type="button" title="Shields" aria-haspopup="true">
 				<svg><use href="#i-shield"/></svg><span class="pill-name" data-i18n="shields">Shields</span><span id="shieldCount" class="pill-count">0</span>
 			</button>
@@ -87,6 +93,8 @@
 		<hr>
 		<p class="menu-label" data-i18n="themes">Themes</p>
 		<div id="menuThemes" class="swatches"></div>
+		<p class="menu-label" data-i18n="countries">Countries</p>
+		<div id="menuCountries" class="swatches"></div>
 		<label class="row menu-row"><span data-i18n="china">China mode 中文模式</span><input id="chinaMode" type="checkbox" role="switch"></label>
 		<hr>
 		<button type="button" data-action="lock-in"><span>Lock In mode</span><kbd>Ctrl+Shift+L</kbd></button>

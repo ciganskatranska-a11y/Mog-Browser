@@ -22,6 +22,7 @@ if (isInternal && location.hostname === "booster") {
 
 	contextBridge.exposeInMainWorld("mogHome", {
 		data: () => ipcRenderer.invoke("home:data"),
+		stats: () => ipcRenderer.invoke("home:stats"),
 		set: patch => ipcRenderer.invoke("home:set", patch),
 		background: (bytes, type) => ipcRenderer.invoke("home:background", bytes, type),
 	});

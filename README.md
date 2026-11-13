@@ -12,7 +12,10 @@ Download `MogBrowser-Setup.exe` from the latest [release](../../releases/latest)
 - **Blackpill Booster:** volume up to 10000%, EQ, voice changer, BONESMASHING and stacks, all built in (Ctrl+Shift+B).
 - **Search:** Google by default. Switch between web, images and videos, or type `image:` or `video:` (short forms `i:` and `v:`) before a search. DuckDuckGo, Brave Search and Bing are also available.
 - **Address bar:** autofills popular sites (YouTube, Instagram, TikTok, Reddit and more) as you type.
-- **Themes:** 12 presets plus custom colours. The home page can use your own background image.
+- **Themes:** 12 presets, 16 country themes with a flag stripe, and custom colours.
+- **Home page:** gradient backdrop or your own image, live Shields stats, a clock, a notes widget, and site tiles you can add and remove.
+- **Emergency button:** the page icon next to Shields (Ctrl+Shift+X) closes every tab and opens a page you choose in Settings.
+- **Offline game:** a bonesmash clicker on the error page when a site cannot be reached.
 - **China mode 中文模式:** Baidu search, Chinese interface and site tiles, and a Chinese-language request header to every site.
 - **Lock In mode (Ctrl+Shift+L):** hides secondary controls and runs a 25-minute focus timer.
 - **Also:** private tabs, tab dragging, find on page, screenshots, history, bookmarks and session restore.
@@ -22,7 +25,8 @@ Download `MogBrowser-Setup.exe` from the latest [release](../../releases/latest)
 ```
 npm install
 npm start        # run from source
-npm test         # end-to-end smoke test (27 checks)
+npm test         # end-to-end smoke test (35 checks)
+npm run art      # re-render installer artwork into build/
 npm run dist     # build the installer into dist/ without publishing
 ```
 

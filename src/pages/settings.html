@@ -3,115 +3,176 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<meta http-equiv="Content-Security-Policy" content="default-src 'self' mog:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+	<meta http-equiv="Content-Security-Policy" content="default-src 'self' mog:; img-src 'self' mog: https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
 	<title>Settings</title>
 	<link rel="icon" href="mog://booster/icons/icon32.png">
-	<link rel="stylesheet" href="newtab.css">
 	<link rel="stylesheet" href="settings.css">
 </head>
 <body>
-	<main class="settings">
-		<header class="page-head">
-			<h1>Settings</h1>
-			<p class="note">Changes save and apply as you make them. <span id="version"></span></p>
-		</header>
+	<svg hidden>
+		<symbol id="s-look" viewBox="0 0 16 16"><path d="M2.5 2.5h11v11h-11zM2.5 8h11M8 2.5v11"/></symbol>
+		<symbol id="s-home" viewBox="0 0 16 16"><path d="M2.5 7.5 8 3l5.5 4.5V13h-4V9.5h-3V13h-4z"/></symbol>
+		<symbol id="s-search" viewBox="0 0 16 16"><path d="M7 2.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zM10.4 10.4l3.1 3.1"/></symbol>
+		<symbol id="s-shield" viewBox="0 0 16 16"><path d="M8 2 3 4v4c0 3 2.2 5 5 6 2.8-1 5-3 5-6V4z"/></symbol>
+		<symbol id="s-bookmark" viewBox="0 0 16 16"><path d="M4.5 2.5h7v11L8 11l-3.5 2.5z"/></symbol>
+		<symbol id="s-history" viewBox="0 0 16 16"><path d="M8 2.5a5.5 5.5 0 1 1-5.2 3.7M2.5 2.8v3.4h3.4M8 5v3.2l2.2 1.4"/></symbol>
+		<symbol id="s-about" viewBox="0 0 16 16"><path d="M8 13V3M3.5 7.5 8 3l4.500 4.500"/></symbol>
+		<symbol id="s-close" viewBox="0 0 16 16"><path d="m4 4 8 8m0-8-8 8"/></symbol>
+	</svg>
 
-		<section class="block">
-			<h2>Theme</h2>
-			<div id="presets" class="presets"></div>
-			<div class="fields">
-				<label for="accent">Accent color</label>
-				<input id="accent" type="color" data-theme="accent">
-				<label for="hot">Hot color (warnings, private tabs)</label>
-				<input id="hot" type="color" data-theme="hot">
-				<label for="background">Background</label>
-				<input id="background" type="color" data-theme="background">
-				<label for="text">Text</label>
-				<input id="text" type="color" data-theme="text">
-				<label for="syncBoosterColors">Use these colors in the Blackpill Booster too</label>
-				<input id="syncBoosterColors" type="checkbox" role="switch" data-key="syncBoosterColors">
-				<label for="isCompact">Compact toolbar</label>
-				<input id="isCompact" type="checkbox" role="switch" data-key="isCompact">
-				<label for="showBookmarks">Show the bookmarks bar</label>
-				<input id="showBookmarks" type="checkbox" role="switch" data-key="showBookmarks">
-			</div>
-		</section>
+	<div class="backdrop" aria-hidden="true"><i></i><i></i><i></i></div>
 
-		<section class="block">
-			<h2>Home page</h2>
-			<div class="fields">
-				<label for="homeTitle">Title</label>
-				<input id="homeTitle" type="text" maxlength="60" data-home="title">
-				<label for="homeTagline">Tagline</label>
-				<input id="homeTagline" type="text" maxlength="60" data-home="tagline">
-				<label for="showClock">Show the clock</label>
-				<input id="showClock" type="checkbox" role="switch" data-home="showClock">
-				<label for="showStats">Show Shields stats</label>
-				<input id="showStats" type="checkbox" role="switch" data-home="showStats">
-				<label for="showSites">Show site tiles</label>
-				<input id="showSites" type="checkbox" role="switch" data-home="showSites">
-				<label for="backgroundFile">Background image</label>
-				<div class="actions inline">
-					<label class="file">Choose image<input id="backgroundFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
-					<button id="removeBackground" type="button">Remove</button>
+	<div class="shell">
+		<aside class="side">
+			<a class="brand" href="mog://newtab/">
+				<img src="mog://booster/icons/icon48.png" alt="">
+				<span>Mog Browser</span>
+			</a>
+			<nav id="nav" class="nav" aria-label="Settings sections">
+				<i id="navGlider" class="nav-glider" aria-hidden="true"></i>
+				<a href="#look" data-page="look"><svg><use href="#s-look"/></svg>Appearance</a>
+				<a href="#home" data-page="home"><svg><use href="#s-home"/></svg>Home page</a>
+				<a href="#search" data-page="search"><svg><use href="#s-search"/></svg>Search</a>
+				<a href="#privacy" data-page="privacy"><svg><use href="#s-shield"/></svg>Privacy</a>
+				<a href="#bookmarks" data-page="bookmarks"><svg><use href="#s-bookmark"/></svg>Bookmarks</a>
+				<a href="#history" data-page="history"><svg><use href="#s-history"/></svg>History</a>
+				<a href="#about" data-page="about"><svg><use href="#s-about"/></svg>About and updates</a>
+			</nav>
+			<p id="saved" class="saved" role="status">Saved</p>
+		</aside>
+
+		<main id="pages" class="pages">
+			<section id="page-look" class="page">
+				<h1>Appearance</h1>
+				<p class="lead">Pick a theme or build your own. It recolours the browser, the home page and the Booster.</p>
+
+				<h2>Themes</h2>
+				<div id="presets" class="cards"></div>
+
+				<h2>Countries</h2>
+				<div id="countries" class="cards flags"></div>
+
+				<h2>Your colours</h2>
+				<div class="wells">
+					<label class="well"><input type="color" data-theme="accent"><span>Accent</span></label>
+					<label class="well"><input type="color" data-theme="hot"><span>Hot</span></label>
+					<label class="well"><input type="color" data-theme="background"><span>Background</span></label>
+					<label class="well"><input type="color" data-theme="text"><span>Text</span></label>
 				</div>
-				<label for="dim">Dim the background image</label>
-				<input id="dim" type="range" min="0" max="90" step="5" data-home="dim">
-			</div>
-		</section>
 
-		<section class="block">
-			<h2>Search</h2>
-			<div class="fields">
-				<label for="searchEngine">Search engine</label>
-				<select id="searchEngine" data-key="searchEngine"></select>
-				<label for="chinaMode">China mode 中文模式: Baidu search, Chinese interface, Chinese sites and a Chinese language request to every site</label>
-				<input id="chinaMode" type="checkbox" role="switch" data-key="chinaMode">
-				<label for="searchMode">Address bar searches for</label>
-				<select id="searchMode" data-key="searchMode">
-					<option value="web">Web</option>
-					<option value="images">Images</option>
-					<option value="videos">Videos</option>
-				</select>
-			</div>
-			<p class="note">In the address bar, type <code>image: jawline</code> or <code>video: mewing</code> to search one type without switching. Short forms <code>i:</code> and <code>v:</code> work too.</p>
-		</section>
+				<h2>Layout</h2>
+				<div class="list">
+					<label class="item"><span><b>Compact toolbar</b><small>Smaller tabs and address bar, more room for the page.</small></span><input class="switch" type="checkbox" role="switch" data-key="isCompact"></label>
+					<label class="item"><span><b>Bookmarks bar</b><small>Show your bookmarks under the address bar.</small></span><input class="switch" type="checkbox" role="switch" data-key="showBookmarks"></label>
+					<label class="item"><span><b>Match the Booster</b><small>Use these colours in the Blackpill Booster too.</small></span><input class="switch" type="checkbox" role="switch" data-key="syncBoosterColors"></label>
+				</div>
+			</section>
 
-		<section class="block">
-			<h2>Privacy and startup</h2>
-			<div class="fields">
-				<label for="shields">Shields: block ads and trackers</label>
-				<input id="shields" type="checkbox" role="switch" data-key="shields">
-				<label for="blockCookies">Block cross-site cookies</label>
-				<input id="blockCookies" type="checkbox" role="switch" data-key="blockCookies">
-				<label for="stripParams">Strip tracking from links</label>
-				<input id="stripParams" type="checkbox" role="switch" data-key="stripParams">
-				<label for="restoreSession">Reopen my tabs on startup</label>
-				<input id="restoreSession" type="checkbox" role="switch" data-key="restoreSession">
-				<label for="clearOnExit">Clear cookies, cache and history every time Mog Browser starts</label>
-				<input id="clearOnExit" type="checkbox" role="switch" data-key="clearOnExit">
-			</div>
-			<div class="actions">
-				<button id="clearData" class="danger" type="button">Clear browsing data now</button>
-				<button id="reset" type="button">Reset all settings</button>
-			</div>
-			<p id="status" class="note" role="status"></p>
-		</section>
+			<section id="page-home" class="page">
+				<h1>Home page</h1>
+				<p class="lead">What you see on every new tab.</p>
 
-		<section class="block">
-			<h2 id="bookmarks">Bookmarks</h2>
-			<ul id="bookmarkList" class="rows"></ul>
-		</section>
+				<h2>Text</h2>
+				<div class="list">
+					<label class="item"><span><b>Title</b></span><input type="text" maxlength="60" data-home="title"></label>
+					<label class="item"><span><b>Tagline</b><small>Leave empty to hide it.</small></span><input type="text" maxlength="60" data-home="tagline"></label>
+				</div>
 
-		<section class="block">
-			<div class="section-head">
-				<h2 id="history">History</h2>
-				<button id="clearHistory" type="button">Clear history</button>
-			</div>
-			<ul id="historyList" class="rows"></ul>
-			<p id="historyEmpty" class="note">Nothing here yet. Private tabs are never recorded.</p>
-		</section>
-	</main>
+				<h2>Widgets</h2>
+				<div class="list">
+					<label class="item"><span><b>Clock</b></span><input class="switch" type="checkbox" role="switch" data-home="showClock"></label>
+					<label class="item"><span><b>Shields stats</b><small>Live count of blocked ads and trackers.</small></span><input class="switch" type="checkbox" role="switch" data-home="showStats"></label>
+					<label class="item"><span><b>Site tiles</b></span><input class="switch" type="checkbox" role="switch" data-home="showSites"></label>
+					<label class="item"><span><b>Notes</b><small>A sticky note that saves as you type.</small></span><input class="switch" type="checkbox" role="switch" data-home="showNotes"></label>
+				</div>
+
+				<h2>Background</h2>
+				<div class="list">
+					<div class="item"><span><b>Image</b><small id="backgroundState">Using the theme gradient.</small></span>
+						<span class="actions">
+							<label class="button">Choose image<input id="backgroundFile" type="file" accept="image/png,image/jpeg,image/webp,image/gif"></label>
+							<button id="removeBackground" class="button" type="button">Remove</button>
+						</span>
+					</div>
+					<label class="item"><span><b>Dim the image</b></span><input type="range" min="0" max="90" step="5" data-home="dim"></label>
+				</div>
+
+				<h2>Site tiles</h2>
+				<p class="lead small">Add your own sites here or with Edit tiles on the home page. With no sites of your own, popular sites are shown.</p>
+				<ul id="siteList" class="rows"></ul>
+				<form id="siteForm" class="inline-form">
+					<input id="siteName" type="text" maxlength="30" placeholder="Name" aria-label="Site name" required>
+					<input id="siteUrl" type="text" maxlength="500" placeholder="Address, like kick.com" aria-label="Site address" required>
+					<button class="button solid" type="submit">Add site</button>
+					<button id="resetSites" class="button" type="button">Use popular sites</button>
+				</form>
+			</section>
+
+			<section id="page-search" class="page">
+				<h1>Search</h1>
+				<p class="lead">Type <code>image: jawline</code> or <code>video: mewing</code> in the address bar to search one type. <code>i:</code> and <code>v:</code> work too.</p>
+				<div class="list">
+					<label class="item"><span><b>Search engine</b></span><select id="searchEngine" data-key="searchEngine"></select></label>
+					<label class="item"><span><b>Address bar searches for</b></span>
+						<select data-key="searchMode">
+							<option value="web">Web</option>
+							<option value="images">Images</option>
+							<option value="videos">Videos</option>
+						</select>
+					</label>
+					<label class="item"><span><b>China mode 中文模式</b><small>Baidu search, Chinese interface and site tiles, and every site is asked for Chinese pages.</small></span><input class="switch" type="checkbox" role="switch" data-key="chinaMode"></label>
+				</div>
+			</section>
+
+			<section id="page-privacy" class="page">
+				<h1>Privacy</h1>
+				<p class="lead">Shields also send Global Privacy Control and Do Not Track, and ask before a site uses your camera, microphone or location.</p>
+				<div class="list">
+					<label class="item"><span><b>Shields</b><small>Block ads and trackers on every site.</small></span><input class="switch" type="checkbox" role="switch" data-key="shields"></label>
+					<label class="item"><span><b>Block cross-site cookies</b><small>Stops sites following you across the web.</small></span><input class="switch" type="checkbox" role="switch" data-key="blockCookies"></label>
+					<label class="item"><span><b>Strip tracking from links</b><small>Removes tags like fbclid and utm_source.</small></span><input class="switch" type="checkbox" role="switch" data-key="stripParams"></label>
+					<label class="item"><span><b>Emergency page</b><small>The page icon next to Shields (or Ctrl+Shift+X) closes every tab at once and opens this instead.</small></span><input id="panicUrl" type="text" maxlength="500" spellcheck="false"></label>
+					<label class="item"><span><b>Reopen my tabs on startup</b></span><input class="switch" type="checkbox" role="switch" data-key="restoreSession"></label>
+					<label class="item"><span><b>Clear data on every start</b><small>Cookies, cache and history are wiped each time Mog Browser opens.</small></span><input class="switch" type="checkbox" role="switch" data-key="clearOnExit"></label>
+				</div>
+				<div class="footer-actions">
+					<button id="clearData" class="button danger" type="button">Clear browsing data now</button>
+				</div>
+			</section>
+
+			<section id="page-bookmarks" class="page">
+				<h1>Bookmarks</h1>
+				<p class="lead">Press Ctrl+D or the star in the address bar to bookmark a page.</p>
+				<ul id="bookmarkList" class="rows"></ul>
+			</section>
+
+			<section id="page-history" class="page">
+				<h1>History</h1>
+				<div class="inline-form">
+					<input id="historyFilter" type="text" placeholder="Filter history" aria-label="Filter history" spellcheck="false">
+					<button id="clearHistory" class="button danger" type="button">Clear history</button>
+				</div>
+				<ul id="historyList" class="rows"></ul>
+				<p id="historyEmpty" class="lead small">Nothing here yet. Private tabs are never recorded.</p>
+			</section>
+
+			<section id="page-about" class="page">
+				<h1>About and updates</h1>
+				<div class="about">
+					<img src="mog://booster/icons/icon128.png" alt="">
+					<div>
+						<strong id="version">Mog Browser</strong>
+						<p id="updateState" class="lead small">Updates download by themselves and install when you close the browser.</p>
+					</div>
+				</div>
+				<div class="footer-actions">
+					<button id="checkUpdate" class="button solid" type="button">Check for updates</button>
+					<button id="reset" class="button danger" type="button">Reset all settings</button>
+				</div>
+			</section>
+		</main>
+	</div>
+
 	<script src="theme.js"></script>
 	<script src="settings.js"></script>
 </body>

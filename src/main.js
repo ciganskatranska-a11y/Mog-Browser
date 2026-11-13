@@ -52,7 +52,9 @@ const defaults = {
 	syncBoosterColors: true,
 	chinaMode: false,
 	themeBefore: null,
-	home: { title: "MOG BROWSER", tagline: "Mog the trackers. Ascend the web.", showStats: true, showClock: true, showSites: true, dim: 45, background: "" },
+	flag: "",
+	panicUrl: "https://ssosza.edupage.org/",
+	home: { title: "MOG BROWSER", tagline: "Mog the trackers. Ascend the web.", showStats: true, showClock: true, showSites: true, showNotes: false, dim: 45, background: "", notes: "", sites: [] },
 	session: [],
 };
 const chinaTheme = { background: "#120303", text: "#fff3e0", accent: "#ffd447", hot: "#ff2d2d" };
@@ -61,6 +63,7 @@ const editable = ["shields", "blockCookies", "stripParams", "isCompact", "showBo
 let settings = structuredClone(defaults);
 let history = [];
 let historyTimer = 0;
+let update = { status: "idle", version: "", percent: 0 };
 let storage = { local: {}, sync: {}, session: {} };
 let settingsTimer = 0;
 let storageTimer = 0;
@@ -119,6 +122,7 @@ function uiState() {
 		homeUrl,
 		search: engine(),
 		version: app.getVersion(),
+		update,
 		engines: Object.entries(engines).map(([id, engine]) => ({ id, name: engine.name })),
 	};
 
@@ -147,10 +151,25 @@ function applyPatch(patch) {
 	for (const key of Object.keys(defaults.theme)) {
 		if (/^#[0-9a-f]{6}$/i.test(patch?.theme?.[key] ?? "")) settings.theme[key] = patch.theme[key].toLowerCase();
 	}
+	if (typeof patch?.flag === "string" && /^[a-z]{0,2}$/.test(patch.flag)) settings.flag = patch.flag;
+	if (typeof patch?.panicUrl === "string") {
+		const url = /^https?:\/\//i.test(patch.panicUrl.trim()) ? patch.panicUrl.trim() : `https://${patch.panicUrl.trim()}`;
+		if (hostOf(url).includes(".")) settings.panicUrl = url.slice(0, 500);
+	}
 	for (const key of Object.keys(defaults.home)) {
 		const value = patch?.home?.[key];
-		if (key === "background" || typeof value !== typeof defaults.home[key]) continue;
-		settings.home[key] = typeof value === "string" ? value.slice(0, 60) : typeof value === "number" ? Math.max(0, Math.min(90, Math.round(value) || 0)) : value;
+		if (key === "background" || value === undefined) continue;
+		if (key === "sites") {
+			if (!Array.isArray(value)) continue;
+			settings.home.sites = value
+				.filter(site => site && typeof site.title === "string" && isWeb(site.url))
+				.slice(0, 24)
+				.map(site => ({ title: site.title.trim().slice(0, 30) || hostOf(site.url), url: site.url.slice(0, 500) }));
+		} else if (key === "notes") {
+			if (typeof value === "string") settings.home.notes = value.slice(0, 4000);
+		} else if (typeof value === typeof defaults.home[key]) {
+			settings.home[key] = typeof value === "string" ? value.slice(0, 60) : typeof value === "number" ? Math.max(0, Math.min(90, Math.round(value) || 0)) : value;
+		}
 	}
 	if (typeof patch?.chinaMode === "boolean" && patch.chinaMode !== settings.chinaMode) {
 		settings.chinaMode = patch.chinaMode;
@@ -366,6 +385,7 @@ function handleInput(event, input) {
 		else if (key === ",") shortcut = "settings";
 		else if (key === "s" && input.shift) shortcut = "screenshot";
 		else if (key === "l" && input.shift) shortcut = "lock-in";
+		else if (key === "x" && input.shift) shortcut = "panic";
 		else if (key === "b" && input.shift) shortcut = "booster";
 		else if (key === "Tab") shortcut = input.shift ? "previous-tab" : "next-tab";
 		else if (key === "=" || key === "+") shortcut = "zoom-in";
@@ -643,7 +663,14 @@ function registerIpc() {
 
 	const isHome = event => String(event.senderFrame?.url ?? "").startsWith("mog://newtab/");
 	ipcMain.handle("home:data", () => ({ ...uiState(), isShielded: settings.shields }));
-	ipcMain.handle("home:set", (event, patch) => isHome(event) ? applyPatch({ theme: patch?.theme, home: patch?.home, chinaMode: patch?.chinaMode }) : null);
+	ipcMain.handle("home:stats", () => ({ blockedTotal: settings.blockedTotal }));
+	ipcMain.handle("home:set", (event, patch) => isHome(event) ? applyPatch({ theme: patch?.theme, flag: patch?.flag, home: patch?.home, chinaMode: patch?.chinaMode }) : null);
+	ipcMain.on("ui:update-install", event => {
+		if (event.sender !== window?.webContents || update.status !== "ready") return;
+		saveSettings(true);
+		saveStorage(true);
+		require("electron-updater").autoUpdater.quitAndInstall(true, true);
+	});
 	ipcMain.handle("home:background", async (event, bytes, type) => {
 
 		if (!isHome(event) && !isSettings(event)) return null;
@@ -679,6 +706,10 @@ function registerIpc() {
 			saveHistory();
 		} else if (name === "clear-data") await clearBrowsingData();
 		else if (name === "reset") return applyPatch({ ...structuredClone(defaults), shields: settings.shields });
+		else if (name === "check-update") {
+			await checkForUpdates(true);
+			return uiState();
+		}
 		saveSettings();
 		toUi("ui:state", uiState());
 		return uiState();
@@ -768,6 +799,13 @@ function registerIpc() {
 
 }
 
+function setUpdate(next) {
+
+	update = { ...update, ...next };
+	toUi("ui:update-state", update);
+
+}
+
 async function checkForUpdates(isManual) {
 
 	if (!app.isPackaged) {
@@ -777,9 +815,14 @@ async function checkForUpdates(isManual) {
 	try {
 		const { autoUpdater } = require("electron-updater");
 		if (!autoUpdater.listenerCount("update-downloaded")) {
-			autoUpdater.on("update-available", info => toUi("ui:toast", `Downloading Mog Browser ${info.version}…`));
-			autoUpdater.on("update-downloaded", info => toUi("ui:toast", `Mog Browser ${info.version} is ready. It installs when you close the browser.`));
+			autoUpdater.on("update-available", info => setUpdate({ status: "downloading", version: info.version, percent: 0 }));
+			autoUpdater.on("download-progress", progress => setUpdate({ status: "downloading", percent: Math.round(progress.percent) }));
+			autoUpdater.on("update-downloaded", info => setUpdate({ status: "ready", version: info.version, percent: 100 }));
+			autoUpdater.on("error", () => {
+				if (update.status === "downloading") setUpdate({ status: "idle" });
+			});
 		}
+		if (update.status === "downloading" || update.status === "ready") return;
 		const result = await autoUpdater.checkForUpdates();
 		if (isManual && !result?.isUpdateAvailable) toUi("ui:toast", `Mog Browser ${app.getVersion()} is the newest version.`);
 	} catch (error) {
@@ -843,6 +886,7 @@ function createWindow() {
 		minWidth: 640,
 		minHeight: 420,
 		backgroundColor: settings.theme.background,
+		show: false,
 		title: "Mog Browser",
 		icon: path.join(roots.booster, "icons", "icon128.png"),
 		titleBarStyle: "hidden",
@@ -864,6 +908,8 @@ function createWindow() {
 	window.on("enter-full-screen", () => toUi("ui:shortcut", "fullscreen-on"));
 	window.on("leave-full-screen", () => toUi("ui:shortcut", "fullscreen-off"));
 	window.on("closed", () => app.quit());
+	window.maximize();
+	window.show();
 	window.loadFile(path.join(__dirname, "ui", "index.html"));
 
 	worker = new BrowserWindow({

@@ -10,7 +10,8 @@
 		"start": "electron .",
 		"test": "node scripts/build.js && electron scripts/smoke.js",
 		"dist": "node scripts/build.js && electron-builder --win --publish never",
-		"release": "node scripts/build.js && electron-builder --win --publish always"
+		"release": "node scripts/build.js && electron-builder --win --publish always",
+		"art": "electron scripts/installer-art.js"
 	},
 	"license": "MIT",
 	"devDependencies": {
@@ -43,16 +44,26 @@
 					]
 				}
 			],
-			"icon": "build/icon.png",
+			"icon": "build/icon.ico",
 			"artifactName": "MogBrowser-Setup.${ext}"
 		},
 		"nsis": {
-			"oneClick": true,
+			"oneClick": false,
 			"perMachine": false,
+			"allowToChangeInstallationDirectory": false,
 			"deleteAppDataOnUninstall": false,
 			"createDesktopShortcut": true,
 			"createStartMenuShortcut": true,
-			"shortcutName": "Mog Browser"
+			"shortcutName": "Mog Browser",
+			"runAfterFinish": true,
+			"installerIcon": "build/icon.ico",
+			"uninstallerIcon": "build/icon.ico",
+			"installerHeaderIcon": "build/icon.ico",
+			"installerSidebar": "build/installerSidebar.bmp",
+			"uninstallerSidebar": "build/uninstallerSidebar.bmp",
+			"installerHeader": "build/installerHeader.bmp",
+			"include": "build/installer.nsh",
+			"uninstallDisplayName": "Mog Browser"
 		},
 		"publish": [
 			{

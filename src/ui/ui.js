@@ -8,7 +8,11 @@ const state = {
 	tabs: [],
 	active: null,
 	closed: [],
-	settings: { shields: true, blockCookies: true, stripParams: true, shieldsOff: [], searchMode: "web", chinaMode: false },
+	settings: { shields: true, blockCookies: true, stripParams: true, shieldsOff: [], searchMode: "web", chinaMode: false, flag: "" },
+	update: { status: "idle", version: "", percent: 0 },
+	regionTimer: 0,
+	smash: null,
+	smashTimer: 0,
 	search: { name: "Google", web: "https://www.google.com/search?q=%s", images: "https://www.google.com/search?q=%s&udm=2", videos: "https://www.google.com/search?q=%s&udm=7" },
 	mode: "web",
 	isLoaded: false,
@@ -143,6 +147,132 @@ function report() {
 		isActive: tab === state.active,
 		isPrivate: tab.isPrivate,
 	})));
+
+}
+
+function refreshDragRegions() {
+
+	clearTimeout(state.regionTimer);
+	state.regionTimer = setTimeout(() => {
+		const spacer = document.querySelector(".drag");
+		const strip = document.querySelector(".strip");
+		strip.style.webkitAppRegion = "no-drag";
+		spacer.style.webkitAppRegion = "no-drag";
+		void spacer.offsetWidth;
+		requestAnimationFrame(() => {
+			strip.style.webkitAppRegion = "";
+			spacer.style.webkitAppRegion = "";
+		});
+	}, 320);
+
+}
+
+function renderUpdate() {
+
+	const chip = element("update");
+	const { status, version, percent } = state.update;
+	const isShown = status === "downloading" || status === "ready";
+	chip.classList.toggle("is-open", isShown);
+	chip.classList.toggle("is-ready", status === "ready");
+	chip.inert = !isShown;
+	element("updateText").textContent = status === "ready" ? `Restart to update` : `Updating ${percent}%`;
+	element("updateBar").style.transform = `scaleX(${status === "ready" ? 1 : percent / 100})`;
+	chip.dataset.tip = status === "ready" ? `Mog Browser ${version} is downloaded. Click to restart and install it.` : `Downloading Mog Browser ${version}`;
+
+}
+
+function loadSmash() {
+
+	if (state.smash) return state.smash;
+	let saved = {};
+	try {
+		saved = JSON.parse(localStorage.getItem("mog-smash") ?? "{}");
+	} catch {
+		saved = {};
+	}
+	state.smash = { score: Number(saved.score) || 0, force: Math.max(1, Number(saved.force) || 1), auto: Number(saved.auto) || 0, best: Number(saved.best) || 0 };
+	return state.smash;
+
+}
+
+function createSmashGame() {
+
+	const game = loadSmash();
+	const box = el("div", "smash");
+	const score = el("strong", "smash-score", "0");
+	const target = el("button", "smash-target");
+	const force = el("button", "smash-buy");
+	const auto = el("button", "smash-buy");
+	const best = el("p", "smash-best");
+	const forceCost = () => 25 * 2 ** (game.force - 1);
+	const autoCost = () => 60 * 2 ** game.auto;
+
+	const render = () => {
+		score.textContent = Math.floor(game.score).toLocaleString();
+		force.textContent = `Heavier hammer · +${game.force + 1} per hit · ${forceCost().toLocaleString()}`;
+		auto.textContent = `Auto-smasher · +${game.auto + 1} per second · ${autoCost().toLocaleString()}`;
+		force.disabled = game.score < forceCost();
+		auto.disabled = game.score < autoCost();
+		best.textContent = `Best: ${Math.floor(game.best).toLocaleString()}`;
+		target.dataset.stage = String(Math.floor(game.score / 5) % 4);
+	};
+	const save = () => {
+		game.best = Math.max(game.best, game.score);
+		try {
+			localStorage.setItem("mog-smash", JSON.stringify(game));
+		} catch {
+			return;
+		}
+	};
+	const gain = (amount, event) => {
+		game.score += amount;
+		save();
+		render();
+		if (!event) return;
+		const bounds = target.getBoundingClientRect();
+		const pop = el("span", "smash-pop", `+${amount}`);
+		pop.style.left = `${(event.clientX || bounds.left + bounds.width / 2) - bounds.left}px`;
+		pop.style.top = `${(event.clientY || bounds.top + 20) - bounds.top}px`;
+		target.append(pop);
+		pop.addEventListener("animationend", () => pop.remove());
+	};
+
+	target.type = "button";
+	target.setAttribute("aria-label", "Smash the bone");
+	target.innerHTML = '<svg class="smash-bone"><use href="#i-bone"/></svg><svg class="smash-hammer"><use href="#i-hammer"/></svg>';
+	target.addEventListener("click", event => {
+		gain(game.force, event);
+		target.classList.remove("is-hit");
+		void target.offsetWidth;
+		target.classList.add("is-hit");
+	});
+	force.type = "button";
+	auto.type = "button";
+	force.addEventListener("click", () => {
+		if (game.score < forceCost()) return;
+		game.score -= forceCost();
+		game.force++;
+		save();
+		render();
+	});
+	auto.addEventListener("click", () => {
+		if (game.score < autoCost()) return;
+		game.score -= autoCost();
+		game.auto++;
+		save();
+		render();
+	});
+
+	const shop = el("div", "smash-shop");
+	const count = el("p", "smash-count");
+	count.append(score, el("span", "", "bones smashed"));
+	shop.append(force, auto);
+	box.append(el("p", "smash-title", "Bonesmash clicker"), count, target, shop, best);
+	box.tick = () => {
+		if (game.auto && box.isConnected && !box.closest("[hidden]")) gain(game.auto);
+	};
+	render();
+	return box;
 
 }
 
@@ -288,7 +418,12 @@ function showFailure(tab, code, description, url) {
 		clearFailure(tab);
 		tab.view.loadURL(url);
 	});
-	box.append(el("h1", "", "It's over"), el("p", "", `${hostOf(url) || "This page"} couldn't be reached.`), el("p", "", `${description || "Unknown error"} (${code})`), retry);
+	const game = createSmashGame();
+	box.append(el("h1", "", "It's over"), el("p", "", `${hostOf(url) || "This page"} couldn't be reached.`), el("p", "", `${description || "Unknown error"} (${code})`), retry, game);
+	clearInterval(state.smashTimer);
+	state.smashTimer = setInterval(() => {
+		for (const node of document.querySelectorAll(".smash")) node.tick();
+	}, 1000);
 	box.hidden = tab !== state.active;
 	tab.failure = box;
 	element("views").append(box);
@@ -312,6 +447,7 @@ function activate(tab) {
 		renderTab(item);
 	}
 	if (isSwitch) {
+		document.querySelector(".brand").animate([{ transform: "rotate(0)" }, { transform: "rotate(360deg)" }], { duration: 620, easing: "cubic-bezier(.16, 1, .3, 1)" });
 		tab.view.classList.remove("is-entering");
 		void tab.view.offsetWidth;
 		tab.view.classList.add("is-entering");
@@ -534,6 +670,7 @@ function createTab({ url, isPrivate = false, isBackground = false, openerId } = 
 	element("tabs").insertBefore(tab.button, next?.button ?? element("tabGlider"));
 	element("views").append(view);
 
+	refreshDragRegions();
 	if (isBackground && state.active) {
 		renderTab(tab);
 		followGlider();
@@ -545,7 +682,7 @@ function createTab({ url, isPrivate = false, isBackground = false, openerId } = 
 
 }
 
-function closeTab(tab) {
+function closeTab(tab, isInstant = false) {
 
 	const index = state.tabs.indexOf(tab);
 	if (index < 0) return;
@@ -558,12 +695,26 @@ function closeTab(tab) {
 	tab.view.remove();
 	if (tab.id) window.mog.send("ui:tab-event", { type: "removed", id: tab.id });
 
+	// The tab gets mogged: a hammer comes down, the tab is flattened, then the gap closes.
 	const button = tab.button;
-	button.style.maxWidth = `${button.offsetWidth}px`;
-	void button.offsetWidth;
-	button.classList.add("is-closing");
-	button.style.maxWidth = "0px";
-	setTimeout(() => button.remove(), 230);
+	const bounds = button.getBoundingClientRect();
+	const hammer = el("div", "hammer");
+	const isReduced = isInstant || matchMedia("(prefers-reduced-motion: reduce)").matches;
+	hammer.innerHTML = '<svg><use href="#i-hammer"/></svg><span>MOGGED</span>';
+	hammer.style.left = `${bounds.left + bounds.width / 2}px`;
+	if (!isReduced) document.body.append(hammer);
+	button.style.maxWidth = `${bounds.width}px`;
+	button.classList.add("is-smashed");
+	setTimeout(() => {
+		button.classList.add("is-closing");
+		button.style.maxWidth = "0px";
+		followGlider(300);
+	}, isReduced ? 0 : 230);
+	setTimeout(() => {
+		button.remove();
+		hammer.remove();
+		refreshDragRegions();
+	}, isReduced ? 30 : 470);
 
 	if (!state.tabs.length) createTab();
 	else if (state.active === tab) activate(state.tabs[Math.min(index, state.tabs.length - 1)]);
@@ -788,20 +939,25 @@ function applyState(next) {
 	state.blockedTotal = next.blockedTotal;
 	state.homeUrl = next.homeUrl;
 
-	applyMogTheme(next.settings.theme);
+	applyMogTheme(next.settings.theme, next.settings.flag);
+	if (next.update) state.update = next.update;
+	renderUpdate();
 	applyMogLanguage(next.settings.chinaMode);
 	syncTips();
 	document.body.classList.toggle("is-compact", next.settings.isCompact);
 	document.body.classList.toggle("hide-bookmarks", !next.settings.showBookmarks);
 	element("version").textContent = `v${next.version}`;
 	element("chinaMode").checked = next.settings.chinaMode;
-	element("menuThemes").replaceChildren(...themePresets.map(preset => {
-		const swatch = themeSwatch(preset, async () => applyState(await window.mog.invoke("ui:settings", { theme: preset.theme })));
-		swatch.setAttribute("aria-pressed", String(isThemeActive(preset, next.settings.theme)));
-		swatch.dataset.tip = preset.name;
-		swatch.removeAttribute("title");
-		return swatch;
-	}));
+	for (const [id, list] of [["menuThemes", themePresets], ["menuCountries", countryThemes]]) {
+		element(id).replaceChildren(...list.map(preset => {
+			const swatch = themeSwatch(preset, async () => applyState(await window.mog.invoke("ui:settings", themePatch(preset))));
+			swatch.setAttribute("aria-pressed", String(isThemeActive(preset, next.settings.theme, next.settings.flag)));
+			swatch.dataset.tip = preset.name;
+			swatch.removeAttribute("title");
+			return swatch;
+		}));
+	}
+	refreshDragRegions();
 	for (const tab of state.tabs) renderTab(tab);
 	renderBookmarks();
 	renderToolbar();
@@ -831,6 +987,7 @@ function setLockIn(isOn) {
 	clearInterval(state.lockTimer);
 	state.lockEndsAt = isOn ? Date.now() + lockMinutes * 60000 : 0;
 	document.body.classList.toggle("is-locked-in", isOn);
+	refreshDragRegions();
 	element("lockIn").setAttribute("aria-pressed", String(isOn));
 	closePanels();
 	followGlider(480);
@@ -902,6 +1059,21 @@ const actions = {
 	},
 	screenshot: () => state.active?.id && window.mog.send("ui:screenshot", state.active.id),
 	"lock-in": () => setLockIn(!document.body.classList.contains("is-locked-in")),
+	// Emergency button: every tab goes at once and one ordinary page takes their place.
+	panic: () => {
+		const others = [...state.tabs];
+		closePanels();
+		closeFind();
+		hideSuggestions();
+		state.closed.length = 0;
+		createTab({ url: state.settings.panicUrl });
+		for (const tab of others) {
+			closeTab(tab, true);
+			tab.button.remove();
+		}
+		state.closed.length = 0;
+		followGlider(60);
+	},
 	"next-tab": () => stepTab(1),
 	"previous-tab": () => stepTab(-1),
 	"zoom-in": () => setZoom(1),
@@ -947,6 +1119,7 @@ function bindEvents() {
 	element("menu").addEventListener("click", () => togglePanel("menuPanel", "menu"));
 	element("booster").addEventListener("click", toggleBooster);
 	element("lockIn").addEventListener("click", actions["lock-in"]);
+	element("reader").addEventListener("click", actions.panic);
 	element("download").addEventListener("click", () => element("download").classList.remove("is-open"));
 
 	element("urlForm").addEventListener("submit", event => {
@@ -1050,6 +1223,14 @@ function bindEvents() {
 	window.mog.on("ui:toast", toast);
 	window.mog.on("ui:state", applyState);
 	window.mog.on("ui:download", showDownload);
+	window.mog.on("ui:update-state", next => {
+		state.update = next;
+		renderUpdate();
+	});
+	element("update").addEventListener("click", () => {
+		if (state.update.status === "ready") window.mog.send("ui:update-install");
+	});
+	window.addEventListener("resize", refreshDragRegions);
 	window.mog.on("ui:tab-action", ({ key, action }) => {
 		const tab = state.tabs.find(item => item.key === key);
 		if (!tab) return;
