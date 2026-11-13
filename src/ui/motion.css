@@ -1,0 +1,602 @@
+/* Motion system.
+   Small controls 120-180ms, menus and tabs 180-280ms, layout 300-450ms.
+   Springs are restrained and settle without visible overshoot. Page content is never animated. */
+
+@property --ambient {
+	syntax: "<color>";
+	inherits: true;
+	initial-value: #e6dcc3;
+}
+
+:root {
+	--quick: 140ms;
+	--medium: 220ms;
+	--slow: 380ms;
+	--out: cubic-bezier(.16, 1, .3, 1);
+	--spring: cubic-bezier(.3, 1.25, .5, 1);
+}
+
+body {
+	--ambient: var(--accent);
+	transition: --ambient var(--slow) var(--out);
+}
+
+body.is-locked-in {
+	--ambient: var(--hot);
+}
+
+#chrome {
+	border-bottom-color: color-mix(in srgb, var(--ambient) 38%, var(--line));
+	transition: border-color var(--slow) var(--out);
+}
+
+.strip {
+	background: linear-gradient(180deg, color-mix(in srgb, var(--ambient) 9%, transparent), transparent);
+}
+
+/* Tabs */
+
+.tab-row {
+	position: relative;
+}
+
+.tab {
+	max-width: 230px;
+	z-index: 1;
+	animation: none;
+	transition: background var(--quick) var(--out), color var(--quick) var(--out), transform var(--medium) var(--out), max-width var(--medium) var(--out), min-width var(--medium) var(--out), padding var(--medium) var(--out), opacity var(--quick) linear;
+}
+
+.tab::before {
+	content: none;
+}
+
+.tab[aria-selected="true"] {
+	background: none;
+}
+
+.tab.is-opening {
+	animation: tab-open var(--medium) var(--out);
+}
+
+@keyframes tab-open {
+	from {
+		max-width: 0;
+		min-width: 0;
+		padding-inline: 0;
+		opacity: 0;
+	}
+}
+
+.tab.is-closing {
+	min-width: 0;
+	padding-inline: 0;
+	border-right-width: 0;
+	opacity: 0;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.tab.is-dragging {
+	z-index: 3;
+	background: var(--raised);
+	box-shadow: 0 8px 24px rgba(0, 0, 0, .6);
+	transition: box-shadow var(--quick) var(--out);
+	cursor: grabbing;
+}
+
+.tab.is-dragging.is-settling {
+	box-shadow: none;
+	transition: transform 180ms var(--out), box-shadow 180ms var(--out);
+}
+
+.tab-row.is-frozen .tab,
+.tab-row.is-frozen .tab-glider,
+.tab-row.is-sorting .tab-glider {
+	transition: none;
+}
+
+.tab-glider {
+	position: absolute;
+	inset: 0 auto 0 0;
+	width: 0;
+	background: var(--raised);
+	box-shadow: inset 0 2px 0 var(--ambient);
+	pointer-events: none;
+	transition: transform var(--medium) var(--out), width var(--medium) var(--out), box-shadow var(--slow) var(--out);
+}
+
+.tab-glider.is-private {
+	box-shadow: inset 0 2px 0 var(--hot);
+}
+
+#views webview.is-entering {
+	animation: view-in 160ms var(--out);
+}
+
+@keyframes view-in {
+	from {
+		opacity: .35;
+	}
+}
+
+/* Buttons and controls */
+
+.icon,
+.pill,
+.mode,
+.bookmarks button,
+.menu button:not(.swatch),
+.failure button {
+	transition: background var(--quick) var(--out), color var(--quick) var(--out), border-color var(--quick) var(--out), transform 260ms var(--spring), max-width var(--slow) var(--out), opacity var(--medium) var(--out), padding var(--slow) var(--out), margin var(--slow) var(--out), width var(--slow) var(--out);
+}
+
+.icon:hover:not(:disabled),
+.pill:hover,
+.mode:hover {
+	transform: translateY(-1px);
+}
+
+.icon:active:not(:disabled),
+.pill:active,
+.mode:active,
+.bookmarks button:active,
+.menu button:not(.swatch):active,
+.swatch:active,
+.failure button:active {
+	transform: scale(.93);
+	transition-duration: 70ms;
+}
+
+.pill {
+	position: relative;
+	overflow: hidden;
+}
+
+.pill::before {
+	content: "";
+	position: absolute;
+	inset: auto 0 0;
+	height: 2px;
+	background: var(--ambient);
+	transform: scaleX(0);
+	transform-origin: left;
+	transition: transform var(--medium) var(--out);
+}
+
+.pill:hover::before,
+.pill[aria-expanded="true"]::before,
+.pill[aria-pressed="true"]::before {
+	transform: scaleX(1);
+}
+
+#reload {
+	position: relative;
+}
+
+#reload svg {
+	position: absolute;
+	display: block !important;
+	transition: opacity var(--quick) var(--out), transform var(--medium) var(--out);
+}
+
+#reload .when-loading,
+#reload.is-loading .when-idle {
+	opacity: 0;
+	transform: rotate(-90deg) scale(.6);
+}
+
+#reload.is-loading .when-loading {
+	opacity: 1;
+	transform: none;
+}
+
+.icon.small svg {
+	transition: fill var(--medium) var(--out), transform var(--medium) var(--out);
+}
+
+#star.is-popping svg {
+	animation: star-pop 320ms var(--out);
+}
+
+@keyframes star-pop {
+	0% {
+		transform: scale(.6);
+	}
+	55% {
+		transform: scale(1.18);
+	}
+	100% {
+		transform: scale(1);
+	}
+}
+
+.pill-count.is-ticking {
+	animation: count-tick 200ms var(--out);
+}
+
+@keyframes count-tick {
+	from {
+		opacity: .2;
+		transform: translateY(-5px);
+	}
+}
+
+.row input,
+.row input::after {
+	transition-duration: var(--medium);
+	transition-timing-function: var(--out);
+}
+
+/* Address bar */
+
+.address {
+	overflow: visible;
+	transition: border-color var(--quick) var(--out), background var(--quick) var(--out), margin var(--medium) var(--out), box-shadow var(--medium) var(--out);
+}
+
+.address:focus-within {
+	margin-inline: 0;
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--ambient) 18%, transparent);
+}
+
+.address::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(100deg, transparent 35%, color-mix(in srgb, var(--text) 12%, transparent) 50%, transparent 65%) no-repeat -120% 0 / 60% 100%;
+	pointer-events: none;
+}
+
+.address:focus-within::after {
+	animation: sheen 520ms var(--out);
+}
+
+@keyframes sheen {
+	to {
+		background-position: 260% 0;
+	}
+}
+
+.halo {
+	position: absolute;
+	inset: -1px;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.halo.is-firing {
+	animation: halo-in 340ms var(--out);
+}
+
+@keyframes halo-in {
+	from {
+		opacity: .9;
+		box-shadow: 0 0 0 16px transparent, 0 0 34px 14px color-mix(in srgb, var(--ambient) 30%, transparent);
+	}
+	to {
+		opacity: 0;
+		box-shadow: 0 0 0 0 color-mix(in srgb, var(--ambient) 80%, transparent), 0 0 0 0 transparent;
+	}
+}
+
+.suggestions {
+	visibility: hidden;
+	opacity: 0;
+	transform: translateY(6px);
+	animation: none;
+	transition: opacity var(--quick) var(--out), transform var(--medium) var(--out), visibility 0s var(--medium);
+}
+
+.suggestions.is-open {
+	visibility: visible;
+	opacity: 1;
+	transform: none;
+	transition: opacity var(--quick) var(--out), transform var(--medium) var(--out), visibility 0s;
+}
+
+.suggestions li {
+	position: relative;
+}
+
+.suggestions li:hover,
+.suggestions li[aria-selected="true"] {
+	background: none;
+}
+
+.suggestions.is-fresh li {
+	animation: rise-in var(--medium) var(--out) backwards;
+	animation-delay: calc(var(--i) * 25ms);
+}
+
+@keyframes rise-in {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+}
+
+.suggest-glider {
+	position: absolute;
+	inset: 0 4px auto;
+	height: 0;
+	background: var(--raised);
+	box-shadow: inset 2px 0 0 var(--ambient);
+	opacity: 0;
+	pointer-events: none;
+	transition: transform var(--quick) var(--out), height var(--quick) var(--out), opacity var(--quick) linear;
+}
+
+.suggest-glider.is-shown {
+	opacity: 1;
+}
+
+/* Panels, find bar, toast and tooltip use transitions so they reverse mid-way when the user changes direction */
+
+.panel,
+.find {
+	visibility: hidden;
+	opacity: 0;
+	transform: translateY(-6px) scale(.97);
+	transform-origin: var(--origin-x, 100%) 0;
+	pointer-events: none;
+	animation: none;
+	transition: opacity var(--medium) var(--out), transform var(--medium) var(--out), visibility 0s var(--medium);
+}
+
+.panel.is-open,
+.find.is-open {
+	visibility: visible;
+	opacity: 1;
+	transform: none;
+	pointer-events: auto;
+	transition: opacity var(--medium) var(--out), transform var(--medium) var(--out), visibility 0s;
+}
+
+.toast {
+	visibility: hidden;
+	opacity: 0;
+	transform: translateY(12px);
+	animation: none;
+	transition: opacity var(--medium) var(--out), transform var(--medium) var(--out), visibility 0s var(--medium);
+}
+
+.toast.is-open {
+	visibility: visible;
+	opacity: 1;
+	transform: none;
+	transition: opacity var(--medium) var(--out), transform var(--medium) var(--out), visibility 0s;
+}
+
+.tip {
+	position: absolute;
+	z-index: 9;
+	max-width: 280px;
+	margin: 0;
+	padding: 4px 8px;
+	overflow: hidden;
+	border: 1px solid var(--line);
+	background: var(--panel);
+	color: var(--text);
+	font-size: 12px;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	translate: -50% 0;
+	opacity: 0;
+	transform: translateY(-4px);
+	pointer-events: none;
+	transition: opacity var(--quick) var(--out), transform var(--quick) var(--out);
+}
+
+.tip.is-open {
+	opacity: 1;
+	transform: none;
+}
+
+/* Loading indicator: trickles forward, then settles to full and fades */
+
+.progress {
+	display: block;
+	opacity: 0;
+}
+
+.progress::after {
+	width: 100%;
+	background: var(--ambient);
+	transform: scaleX(0);
+	transform-origin: left;
+	animation: none;
+}
+
+.progress.is-loading {
+	opacity: 1;
+}
+
+.progress.is-loading::after {
+	transform: scaleX(.88);
+	transition: transform 9s cubic-bezier(.05, .7, .1, 1);
+}
+
+.progress.is-done {
+	opacity: 0;
+	transition: opacity 260ms 180ms var(--out);
+}
+
+.progress.is-done::after {
+	transform: scaleX(1);
+	transition: transform 180ms var(--out);
+}
+
+/* Download chip: continuous progress, then a drawn checkmark */
+
+.download {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	flex: none;
+	max-width: 0;
+	height: var(--bar);
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 0 solid var(--line);
+	background: none;
+	font-weight: 600;
+	font-size: 12px;
+	opacity: 0;
+	transform: translateY(6px);
+	transition: max-width var(--slow) var(--out), padding var(--slow) var(--out), margin var(--slow) var(--out), opacity var(--medium) var(--out), transform var(--medium) var(--out), border-width 0s var(--slow);
+}
+
+.download.is-open {
+	max-width: 200px;
+	margin-right: 4px;
+	padding: 0 10px;
+	border-width: 1px;
+	opacity: 1;
+	transform: none;
+	transition: max-width var(--slow) var(--out), padding var(--slow) var(--out), margin var(--slow) var(--out), opacity var(--medium) var(--out), transform var(--medium) var(--out), border-width 0s;
+}
+
+.download span {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.download i {
+	position: absolute;
+	inset: auto 0 0;
+	height: 2px;
+	background: var(--ambient);
+	transform: scaleX(0);
+	transform-origin: left;
+	transition: transform 300ms linear, opacity var(--slow) 600ms var(--out);
+}
+
+.download.is-unknown i {
+	animation: pulse-bar 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes pulse-bar {
+	from {
+		opacity: .25;
+	}
+}
+
+.download.is-done i {
+	opacity: 0;
+}
+
+.download svg {
+	flex: none;
+	width: 0;
+	color: var(--ambient);
+	stroke-width: 2;
+	stroke-dasharray: 16;
+	stroke-dashoffset: 16;
+	transition: width var(--medium) var(--out);
+}
+
+.download.is-done svg {
+	width: 16px;
+	stroke-dashoffset: 0;
+	transition: width var(--medium) var(--out), stroke-dashoffset 360ms 120ms var(--out);
+}
+
+/* Lock In mode: secondary controls collapse, ambient light shifts to the focus color, the timer slides in */
+
+.lock-timer {
+	max-width: 0;
+	overflow: hidden;
+	color: var(--hot);
+	font-variant-numeric: tabular-nums;
+	opacity: 0;
+	transform: translateX(-8px);
+	transition: max-width var(--slow) var(--out), opacity var(--medium) var(--out), transform var(--slow) var(--out);
+}
+
+.pill.lock {
+	gap: 0;
+	margin-right: 4px;
+	transition: background var(--quick) var(--out), border-color var(--slow) var(--out), transform 260ms var(--spring), gap var(--slow) var(--out);
+}
+
+.pill.lock svg {
+	transition: color var(--slow) var(--out);
+}
+
+body.is-locked-in .pill.lock {
+	gap: 7px;
+	border-color: var(--hot);
+}
+
+body.is-locked-in .pill.lock svg {
+	color: var(--hot);
+}
+
+body.is-locked-in .lock-timer {
+	max-width: 60px;
+	opacity: 1;
+	transform: none;
+}
+
+.pill-name {
+	max-width: 90px;
+	overflow: hidden;
+	transition: max-width var(--slow) var(--out), opacity var(--medium) var(--out), margin var(--slow) var(--out);
+}
+
+body.is-locked-in .pill-name {
+	max-width: 0;
+	margin-left: -7px;
+	opacity: 0;
+}
+
+.bookmarks {
+	max-height: 30px;
+	transition: max-height var(--slow) var(--out), opacity var(--medium) var(--out), padding var(--slow) var(--out);
+}
+
+body.is-locked-in .bookmarks {
+	max-height: 0;
+	padding-block: 0;
+	opacity: 0;
+}
+
+.mode {
+	max-width: 90px;
+}
+
+body.is-locked-in #home,
+body.is-locked-in #star,
+body.is-locked-in #newTab,
+body.is-locked-in .mode {
+	width: 0;
+	max-width: 0;
+	margin: 0;
+	padding: 0;
+	border-width: 0;
+	overflow: hidden;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.brand {
+	transition: filter var(--slow) var(--out);
+}
+
+body.is-locked-in .brand {
+	filter: drop-shadow(0 0 6px var(--hot));
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		transition-duration: 1ms !important;
+		transition-delay: 0s !important;
+		animation: none !important;
+	}
+}

@@ -1,0 +1,73 @@
+{
+	"name": "mog-browser",
+	"productName": "Mog Browser",
+	"version": "1.0.0",
+	"description": "A blackpill themed browser with built-in shields and the Blackpill Booster.",
+	"main": "src/main.js",
+	"scripts": {
+		"build": "node scripts/build.js",
+		"prestart": "node scripts/build.js",
+		"start": "electron .",
+		"test": "node scripts/build.js && electron scripts/smoke.js",
+		"dist": "node scripts/build.js && electron-builder --win --publish never",
+		"release": "node scripts/build.js && electron-builder --win --publish always"
+	},
+	"license": "MIT",
+	"devDependencies": {
+		"electron": "^45.3.1",
+		"electron-builder": "^26.18.0"
+	},
+	"dependencies": {
+		"@ghostery/adblocker-electron": "^2.20.3",
+		"electron-updater": "^6.8.11"
+	},
+	"author": "Mog Browser",
+	"build": {
+		"appId": "com.mogbrowser.app",
+		"productName": "Mog Browser",
+		"files": [
+			"src/**/*",
+			"booster/**/*",
+			"dist/**/*",
+			"package.json"
+		],
+		"asarUnpack": [
+			"booster/**/*"
+		],
+		"win": {
+			"target": [
+				{
+					"target": "nsis",
+					"arch": [
+						"x64"
+					]
+				}
+			],
+			"icon": "build/icon.png",
+			"artifactName": "MogBrowser-Setup.${ext}"
+		},
+		"nsis": {
+			"oneClick": true,
+			"perMachine": false,
+			"deleteAppDataOnUninstall": false,
+			"createDesktopShortcut": true,
+			"createStartMenuShortcut": true,
+			"shortcutName": "Mog Browser"
+		},
+		"publish": [
+			{
+				"provider": "github",
+				"owner": "ciganskatranska-a11y",
+				"repo": "Mog-Browser",
+				"releaseType": "release"
+			}
+		],
+		"directories": {
+			"output": "release"
+		}
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/ciganskatranska-a11y/Mog-Browser.git"
+	}
+}

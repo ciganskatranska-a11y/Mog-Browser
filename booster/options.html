@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Blackpill Booster Settings</title>
+	<link rel="icon" href="icons/icon32.png">
+	<link rel="stylesheet" href="theme.css">
+	<link rel="stylesheet" href="options.css">
+</head>
+<body>
+	<header class="page-head">
+		<img src="icons/icon128.png" alt="" class="page-logo">
+		<div>
+			<h1>Blackpill Booster</h1>
+			<p>Every setting in one place. Changes save as you make them, except the stack editor, which saves when you press Save.</p>
+		</div>
+	</header>
+
+	<nav class="toc" aria-label="Sections">
+		<a href="#general">General</a>
+		<a href="#engine">Engine</a>
+		<a href="#editor">Stack editor</a>
+		<a href="#rules">Site rules</a>
+		<a href="#sites">Remembered sites</a>
+		<a href="#stats">Stats</a>
+		<a href="#shortcuts">Shortcuts</a>
+		<a href="#backup">Backup</a>
+		<a href="#tips">Outside the browser</a>
+	</nav>
+
+	<main>
+		<section id="general" class="card">
+			<h2>General</h2>
+			<div class="form-grid">
+				<label for="newTabs">New tabs start with</label>
+				<select id="newTabs"></select>
+
+				<label for="volumeStep">Volume step (keyboard and buttons)</label>
+				<input id="volumeStep" type="number" min="1" max="100" step="1">
+
+				<label for="normalCap">Volume cap</label>
+				<input id="normalCap" type="number" min="100" max="2000" step="50">
+
+				<label for="ascendCap">ASCEND volume cap</label>
+				<input id="ascendCap" type="number" min="600" max="10000" step="100">
+
+				<label for="showSpectrum">Show the spectrum analyzer</label>
+				<label class="switch"><input id="showSpectrum" type="checkbox" role="switch"><span></span></label>
+
+				<label for="showTiers">Show PSL tier ratings for volume</label>
+				<label class="switch"><input id="showTiers" type="checkbox" role="switch"><span></span></label>
+
+				<label for="accent">Accent color</label>
+				<input id="accent" type="color">
+
+				<label for="hot">Hot color (ASCEND, BONESMASHING, warnings)</label>
+				<input id="hot" type="color">
+			</div>
+			<button id="resetColors" class="ghost" type="button">Reset colors</button>
+		</section>
+
+		<section id="engine" class="card">
+			<h2>Engine</h2>
+			<div class="form-grid">
+				<label for="engineMode">Engine mode</label>
+				<select id="engineMode">
+					<option value="auto">Auto (recommended)</option>
+					<option value="direct">Direct only</option>
+					<option value="capture">Capture only</option>
+				</select>
+
+				<label for="cpuGuard">CPU guard (turns off the heaviest features if audio would stutter)</label>
+				<label class="switch"><input id="cpuGuard" type="checkbox" role="switch"><span></span></label>
+
+				<label for="sync">Sync stacks and settings across your Chrome devices</label>
+				<label class="switch"><input id="sync" type="checkbox" role="switch"><span></span></label>
+
+				<label for="autoStart">Auto-mog remembered sites and site rules as soon as you press play</label>
+				<label class="switch"><input id="autoStart" type="checkbox" role="switch"><span></span></label>
+			</div>
+			<p class="hint">Direct boosts the page's own player: fullscreen keeps working and there's no delay. Capture grabs the whole tab's sound and works everywhere, including protected video. Auto uses Direct when it can. If a site goes quiet in Direct mode, click Direct in the popup to switch that tab to Capture.</p>
+			<p id="autoStartNote" class="hint">Auto-mog and Speed-maxx in embedded players need access to all sites. Chrome will ask once.</p>
+			<div class="toolbar">
+				<button id="deviceNames" class="ghost" type="button">Show output device names</button>
+				<button id="revokeAccess" class="ghost" type="button">Remove all-sites access</button>
+			</div>
+			<p id="engineStatus" class="hint" role="status"></p>
+		</section>
+
+		<section id="editor" class="card">
+			<div class="card-head">
+				<div>
+					<h2>Stack editor</h2>
+					<p>Pick a stack and edit every control. Built-in stacks save as a copy.</p>
+				</div>
+				<p id="editorStatus" class="status-text" role="status"></p>
+			</div>
+			<div class="toolbar">
+				<select id="editStack" aria-label="Stack to edit"></select>
+				<input id="editName" type="text" maxlength="40" aria-label="Stack name">
+				<button id="saveEdit" class="solid" type="button">Save</button>
+				<button id="saveCopy" class="ghost" type="button">Save as new stack</button>
+				<button id="makeDefault" class="ghost" type="button">Use for new tabs</button>
+				<button id="deleteStack" class="ghost danger" type="button">Delete</button>
+			</div>
+			<div class="toolbar">
+				<button id="copyEditorCode" class="ghost" type="button">Copy share code</button>
+				<input id="editorCode" type="text" placeholder="Paste a BP3 code to load it here" aria-label="Share code" autocomplete="off" spellcheck="false">
+				<button id="loadEditorCode" class="ghost" type="button">Load code</button>
+				<input id="controlSearch" type="search" placeholder="Find a control" aria-label="Find a control">
+			</div>
+			<p id="codeStatus" class="hint" role="status"></p>
+			<div class="editor-top">
+				<div id="levelSection"></div>
+				<div class="group">
+					<h2>EQ-maxx</h2>
+					<div id="editorEqualizer"></div>
+				</div>
+			</div>
+			<div id="editorSections" class="editor-sections"></div>
+		</section>
+
+		<section id="rules" class="card">
+			<div class="card-head">
+				<div>
+					<h2>Site rules</h2>
+					<p>Start matching sites with a stack. Use * as a wildcard, like *.youtube.com. Remembered sites win over rules.</p>
+				</div>
+			</div>
+			<ul id="ruleList" class="row-list"></ul>
+			<form id="ruleForm" class="toolbar">
+				<input id="rulePattern" type="text" placeholder="*.youtube.com" aria-label="Site pattern" required>
+				<select id="ruleStack" aria-label="Stack for this site"></select>
+				<button class="solid" type="submit">Add rule</button>
+			</form>
+		</section>
+
+		<section id="sites" class="card">
+			<div class="card-head">
+				<div>
+					<h2>Remembered sites</h2>
+					<p>Sites where the popup's "This site" switch is on. They start with their own settings.</p>
+				</div>
+				<button id="forgetAll" class="ghost" type="button">Forget all</button>
+			</div>
+			<ul id="siteList" class="row-list"></ul>
+			<p id="sitesEmpty" class="hint">No remembered sites yet.</p>
+		</section>
+
+		<section id="stats" class="card">
+			<h2>Mog stats</h2>
+			<p class="hint">Hidden stacks unlock as you go. Time only counts while a tab is boosted and not muted.</p>
+			<div id="statGrid" class="stat-grid"></div>
+			<ul id="unlockList" class="row-list"></ul>
+		</section>
+
+		<section id="shortcuts" class="card">
+			<div class="card-head">
+				<div>
+					<h2>Keyboard shortcuts</h2>
+					<p>Chrome sets keys on its own shortcuts page. Commands without a key can be assigned there.</p>
+				</div>
+				<button id="editShortcuts" class="solid" type="button">Change shortcuts</button>
+			</div>
+			<ul id="commandList" class="row-list"></ul>
+		</section>
+
+		<section id="backup" class="card">
+			<h2>Backup</h2>
+			<p class="hint">Exports stacks, remembered sites, last used settings and preferences as one file.</p>
+			<div class="toolbar">
+				<button id="exportAll" class="solid" type="button">Export backup</button>
+				<label class="ghost file-button">Import backup<input id="importAll" type="file" accept="application/json,.json"></label>
+				<button id="resetEverything" class="ghost danger" type="button">Reset everything</button>
+			</div>
+			<p id="backupStatus" class="hint" role="status"></p>
+		</section>
+
+		<section id="tips" class="card">
+			<h2>Outside-the-browser maxxing</h2>
+			<p class="hint">The extension can only push what Chrome sends to your device. These get the rest.</p>
+			<ul class="tips">
+				<li>Set your system volume and the site's own player volume to 100%. The booster multiplies what the page outputs.</li>
+				<li>Windows: Settings, System, Sound, your output device, then turn on Loudness Equalization or Audio enhancements if your driver offers it.</li>
+				<li>Windows: in the classic Sound control panel, Communications tab, choose "Do nothing" so calls don't duck your audio.</li>
+				<li>Small speakers waste power on bass they can't play. Use the Phone speaker cope stack: low cut plus Phantom bass.</li>
+				<li>Loud for long is how hearing goes. Above about 85 dB, keep sessions short.</li>
+			</ul>
+		</section>
+	</main>
+
+	<script src="chrome-shim.js"></script>
+	<script src="shared.js"></script>
+	<script src="ui.js"></script>
+	<script src="options.js"></script>
+</body>
+</html>

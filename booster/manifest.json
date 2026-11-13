@@ -1,0 +1,90 @@
+{
+	"manifest_version": 3,
+	"name": "Blackpill Booster",
+	"short_name": "Blackpill",
+	"version": "3.0.0",
+	"description": "Mog any tab up to 10000% with a mastering-grade loudness chain, HD voice changer, BONESMASHING, share codes and stacks.",
+	"minimum_chrome_version": "124",
+	"permissions": ["tabCapture", "offscreen", "storage", "activeTab", "scripting", "contextMenus", "downloads"],
+	"optional_host_permissions": ["<all_urls>"],
+	"background": {
+		"service_worker": "background.js"
+	},
+	"options_page": "options.html",
+	"web_accessible_resources": [
+		{
+			"resources": ["processors.js"],
+			"matches": ["<all_urls>"]
+		}
+	],
+	"action": {
+		"default_popup": "popup.html",
+		"default_title": "Blackpill Booster",
+		"default_icon": {
+			"16": "icons/icon16.png",
+			"32": "icons/icon32.png",
+			"48": "icons/icon48.png",
+			"128": "icons/icon128.png"
+		}
+	},
+	"icons": {
+		"16": "icons/icon16.png",
+		"32": "icons/icon32.png",
+		"48": "icons/icon48.png",
+		"128": "icons/icon128.png"
+	},
+	"commands": {
+		"volume-up": {
+			"suggested_key": { "default": "Alt+Shift+Up" },
+			"description": "Mog harder (volume up)"
+		},
+		"volume-down": {
+			"suggested_key": { "default": "Alt+Shift+Down" },
+			"description": "Mog softer (volume down)"
+		},
+		"toggle-mute": {
+			"suggested_key": { "default": "Alt+Shift+M" },
+			"description": "Ghost or unghost (mute)"
+		},
+		"toggle-distortion": {
+			"suggested_key": { "default": "Alt+Shift+D" },
+			"description": "Toggle BONESMASHING"
+		},
+		"toggle-power": {
+			"description": "Start or stop mogging this tab"
+		},
+		"toggle-ascend": {
+			"description": "Toggle ASCEND"
+		},
+		"toggle-automog": {
+			"description": "Toggle Auto-mog"
+		},
+		"toggle-gigamog": {
+			"description": "Toggle Gigamog"
+		},
+		"toggle-original": {
+			"description": "Hear the original or the boosted sound"
+		},
+		"toggle-record": {
+			"description": "Start or stop recording this tab"
+		},
+		"volume-max": {
+			"description": "Jump to max volume"
+		},
+		"next-stack": {
+			"description": "Switch to the next stack"
+		},
+		"next-voice": {
+			"description": "Switch to the next voice preset"
+		},
+		"undo": {
+			"description": "Undo the last change"
+		},
+		"redo": {
+			"description": "Redo the last change"
+		},
+		"reset-tab": {
+			"description": "Back to normie (reset this tab)"
+		}
+	}
+}

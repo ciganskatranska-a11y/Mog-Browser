@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Blackpill Booster</title>
+	<link rel="stylesheet" href="theme.css">
+	<link rel="stylesheet" href="popup.css">
+</head>
+<body>
+	<header class="top">
+		<img class="logo" src="icons/icon48.png" alt="">
+		<div class="brand">
+			<h1>Blackpill Booster</h1>
+			<p class="site"><img id="siteIcon" class="favicon" alt=""><span id="siteTitle">This tab</span></p>
+		</div>
+		<div class="badges">
+			<span id="status" class="status">Off</span>
+			<button id="modeChip" class="mode-chip" type="button" hidden></button>
+		</div>
+		<label class="switch power" title="Mog this tab">
+			<input id="power" type="checkbox" role="switch" aria-label="Mog this tab">
+			<span></span>
+		</label>
+	</header>
+
+	<nav class="tabs" role="tablist">
+		<button role="tab" data-panel="mog" aria-selected="true">Mog</button>
+		<button role="tab" data-panel="eq" aria-selected="false">EQ</button>
+		<button role="tab" data-panel="voice" aria-selected="false">Voice</button>
+		<button role="tab" data-panel="smash" aria-selected="false">BONESMASHING</button>
+		<button role="tab" data-panel="loud" aria-selected="false">Loudmaxx</button>
+		<button role="tab" data-panel="stacks" aria-selected="false">Stacks</button>
+		<button role="tab" data-panel="tabs" aria-selected="false">Tabs <span id="tabCount" class="count">0</span></button>
+	</nav>
+
+	<p id="banner" class="banner" role="alert" hidden></p>
+
+	<main>
+		<section id="panel-mog" class="panel" role="tabpanel">
+			<div class="readout">
+				<button id="volumeDown" class="nudge" aria-label="Volume down">−</button>
+				<div id="big" class="big"><output id="volumeValue">100</output><span class="unit">%</span></div>
+				<button id="volumeUp" class="nudge" aria-label="Volume up">+</button>
+			</div>
+			<p class="meta"><span id="volumeDb">0.0 dB</span><span id="tier" class="tier">Normie</span></p>
+			<input id="volume" class="fader" type="range" min="0" max="600" step="5" value="100" aria-label="Volume">
+			<div id="volumeChips" class="chips">
+				<button data-mute>Ghost</button>
+				<button data-volume="100">100%</button>
+				<button data-volume="200">200%</button>
+				<button data-volume="400">400%</button>
+				<button data-volume="600">600%</button>
+				<button data-volume="max">MOG</button>
+			</div>
+
+			<div id="compare" class="segmented compare" role="radiogroup" aria-label="Compare">
+				<button type="button" data-value="boosted" title="What the booster outputs">Boosted</button>
+				<button type="button" data-value="original" title="The tab without any processing">Original</button>
+				<button type="button" data-value="matched" title="Boosted, turned down to the original's loudness for a fair comparison">Matched</button>
+			</div>
+			<div class="tools">
+				<button id="undo" class="tool" type="button" title="Undo (Ctrl+Z)">Undo</button>
+				<button id="redo" class="tool" type="button" title="Redo (Ctrl+Shift+Z)">Redo</button>
+				<button id="slotA" class="tool slot" type="button" title="Settings slot A">A</button>
+				<button id="slotB" class="tool slot" type="button" title="Settings slot B">B</button>
+				<button id="copySlot" class="tool" type="button" title="Copy these settings to the other slot">Copy</button>
+				<button id="record" class="tool record" type="button" title="Record what you hear to a file">Record</button>
+			</div>
+			<p id="guard" class="banner guard" hidden>CPU guard turned off oversampling and HD pitch on this tab to keep the audio smooth.</p>
+			<canvas id="spectrum" class="spectrum" title="Click to switch between before and after" role="img" aria-label="Spectrum analyzer"></canvas>
+			<div class="meters" aria-hidden="true">
+				<span>Output</span>
+				<div class="meter output"><i id="outputBar"></i></div>
+				<span id="outputText" class="meter-value">−∞</span>
+				<span>Loudness</span>
+				<div class="meter loudness"><i id="loudnessBar"></i></div>
+				<span id="loudnessText" class="meter-value">−∞</span>
+				<span>Coping</span>
+				<div class="meter reduction"><i id="reductionBar"></i></div>
+				<span id="reductionText" class="meter-value">0.0</span>
+			</div>
+
+			<h3 class="quick-title">Quick toggles</h3>
+			<div id="quick" class="quick"></div>
+
+			<div class="output-row">
+				<label for="sink">Output device</label>
+				<select id="sink"></select>
+			</div>
+		</section>
+
+		<section id="panel-eq" class="panel" role="tabpanel" hidden>
+			<div id="equalizer"></div>
+		</section>
+
+		<section id="panel-voice" class="panel" role="tabpanel" hidden>
+			<div class="group">
+				<h2>Voice presets</h2>
+				<div id="voicePresets"></div>
+			</div>
+			<div class="group">
+				<div class="group-head">
+					<div>
+						<h2>Speed-maxx</h2>
+						<p>Playback speed of videos on this page, pitch kept natural.</p>
+					</div>
+				</div>
+				<div id="speed"></div>
+			</div>
+		</section>
+
+		<section id="panel-smash" class="panel" role="tabpanel" hidden></section>
+
+		<section id="panel-loud" class="panel" role="tabpanel" hidden>
+			<div class="group cta">
+				<div class="group-head">
+					<div>
+						<h2>Maxx everything</h2>
+						<p>One tap for the full mastering chain: auto gain, multiband, clipper, punch, bass mono, phantom bass, exciter and a true peak limiter.</p>
+					</div>
+					<button id="maxxEverything" class="solid" type="button">Maxx it</button>
+				</div>
+			</div>
+		</section>
+
+		<section id="panel-stacks" class="panel" role="tabpanel" hidden>
+			<div class="group">
+				<h2>Share codes</h2>
+				<p class="hint">A code holds every setting. Send yours, or paste one to hear someone else's stack.</p>
+				<button id="copyCode" class="solid wide" type="button">Copy code for these settings</button>
+				<form id="codeForm" class="save-row">
+					<input id="codeInput" type="text" placeholder="Paste a BP3 code" aria-label="Share code" autocomplete="off" spellcheck="false">
+					<button class="ghost" type="submit">Apply</button>
+					<button id="saveCode" class="ghost" type="button">Save</button>
+				</form>
+				<p id="codeStatus" class="hint" role="status"></p>
+			</div>
+			<div class="group">
+				<div class="group-head">
+					<div>
+						<h2>This site</h2>
+						<p id="rememberText">Remember these settings on this site.</p>
+					</div>
+					<label class="switch"><input id="remember" type="checkbox" role="switch" aria-label="Remember settings on this site"><span></span></label>
+				</div>
+			</div>
+			<div class="group">
+				<h2>Built-in stacks</h2>
+				<div id="builtIns" class="stack-grid"></div>
+			</div>
+			<div class="group">
+				<h2>Your stacks</h2>
+				<ul id="userStacks" class="stack-list"></ul>
+				<p id="stacksEmpty" class="hint">Save your current settings as a stack to reuse them on any tab.</p>
+				<form id="saveStack" class="save-row">
+					<input id="stackName" type="text" maxlength="40" placeholder="Name your stack" aria-label="Stack name" required>
+					<button class="solid" type="submit">Save stack</button>
+				</form>
+			</div>
+		</section>
+
+		<section id="panel-tabs" class="panel" role="tabpanel" hidden>
+			<ul id="tabList" class="tab-list"></ul>
+			<p id="tabEmpty" class="hint">No tabs are getting mogged. Change any control on a tab to start.</p>
+			<div id="tabActions" class="tab-actions">
+				<button id="applyAll" class="ghost" type="button">Copy this tab to all</button>
+				<button id="stopAll" class="ghost" type="button">Unmog all tabs</button>
+			</div>
+		</section>
+	</main>
+
+	<footer class="bottom">
+		<button id="resetAll" class="link" type="button">Back to normie</button>
+		<button id="openOptions" class="link" type="button">All settings</button>
+		<button id="popOut" class="link" type="button">Pop out</button>
+		<button id="shortcuts" class="link" type="button">Keyboard shortcuts</button>
+	</footer>
+
+	<script src="chrome-shim.js"></script>
+	<script src="shared.js"></script>
+	<script src="ui.js"></script>
+	<script src="popup.js"></script>
+</body>
+</html>
